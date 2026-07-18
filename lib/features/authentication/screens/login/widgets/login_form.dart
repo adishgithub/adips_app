@@ -9,11 +9,15 @@ import 'package:get/get.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
+
   @override
   State<LoginForm> createState() => _LoginFormState();
 }
 
 class _LoginFormState extends State<LoginForm> {
+  // Local UI-only state. Kept out of Obx/GetX so toggling it doesn't tear
+  // down and rebuild the TextFormField's RenderEditable mid-frame, which
+  // was causing: "'attached': is not true" on RenderObject.getTransformTo.
   bool _obscurePassword = true;
 
   @override
@@ -37,29 +41,29 @@ class _LoginFormState extends State<LoginForm> {
           const SizedBox(height: AdipsSizes.spaceBtwInputFields),
 
           // Password
-          Obx(
-                () => CustomTextField(
-              controller: controller.passwordController,
-              labelText: "Password",
-              hintText: "Enter your password",
-              prefixIcon: Icons.lock_outline,
-              obscureText: controller.obscurePassword.value,
-              suffixIcon: controller.obscurePassword.value
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              onSuffixIconTap: controller.togglePasswordVisibility,
-              validator: AdipsValidator.validatePassword,
-            ),
+          CustomTextField(
+            controller: controller.passwordController,
+            labelText: "Password",
+            hintText: "Enter your password",
+            prefixIcon: Icons.lock_outline,
+            obscureText: _obscurePassword,
+            suffixIcon: _obscurePassword
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+            onSuffixIconTap: () {
+              setState(() => _obscurePassword = !_obscurePassword);
+            },
+            validator: AdipsValidator.validatePassword,
           ),
           const SizedBox(height: AdipsSizes.sm),
 
           // Forgot password
-          // CustomTextLinkButton(
-          //   text: "Forgot password?",
-          //   onPressed: () {
-          //     // TODO: Navigate to forgot password screen
-          //   },
-          // ),
+          CustomTextLinkButton(
+            text: "Forgot password?",
+            onPressed: () {
+              // TODO: Navigate to forgot password screen
+            },
+          ),
           const SizedBox(height: AdipsSizes.spaceBtwItems),
 
           // Login button
@@ -80,7 +84,10 @@ class _LoginFormState extends State<LoginForm> {
                 const Text("Don't have an account? "),
                 CustomTextLinkButton(
                   text: "Create Account",
-                  onPressed: () => Get.toNamed('/register'),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    Get.toNamed('/register');
+                  },
                 ),
               ],
             ),

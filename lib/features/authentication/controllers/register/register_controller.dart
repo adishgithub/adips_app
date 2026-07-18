@@ -12,16 +12,6 @@ class RegisterController extends GetxController {
   final confirmPasswordController = TextEditingController();
 
   RxBool isLoading = false.obs;
-  RxBool obscurePassword = true.obs;
-  RxBool obscureConfirmPassword = true.obs;
-
-  void togglePasswordVisibility() {
-    obscurePassword.value = !obscurePassword.value;
-  }
-
-  void toggleConfirmPasswordVisibility() {
-    obscureConfirmPassword.value = !obscureConfirmPassword.value;
-  }
 
   String? validateConfirmPassword(String? value) {
     if (value == null || value.isEmpty) {
@@ -37,6 +27,13 @@ class RegisterController extends GetxController {
     if (!formKey.currentState!.validate()) {
       return;
     }
+
+    // Dismiss the keyboard/caret before doing anything that might rebuild
+    // or replace this screen. Without this, a pending caret-position frame
+    // callback can fire against a TextFormField that's already been torn
+    // down by navigation, throwing:
+    // "'attached': is not true" on RenderObject.getTransformTo.
+    FocusManager.instance.primaryFocus?.unfocus();
 
     isLoading.value = true;
 

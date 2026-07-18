@@ -11,16 +11,18 @@ class LoginController extends GetxController {
   final passwordController = TextEditingController();
 
   RxBool isLoading = false.obs;
-  // RxBool obscurePassword = true.obs;
-
-  void togglePasswordVisibility() {
-    obscurePassword.value = !obscurePassword.value;
-  }
 
   Future<void> login() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
+
+    // Dismiss the keyboard/caret before doing anything that might rebuild
+    // or replace this screen. Without this, a pending caret-position frame
+    // callback can fire against a TextFormField that's already been torn
+    // down by navigation, throwing:
+    // "'attached': is not true" on RenderObject.getTransformTo.
+    FocusManager.instance.primaryFocus?.unfocus();
 
     isLoading.value = true;
 

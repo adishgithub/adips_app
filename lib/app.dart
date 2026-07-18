@@ -1,4 +1,5 @@
 import 'package:adips/features/authentication/controllers/login/login_binding.dart';
+import 'package:adips/features/authentication/controllers/register/register_binding.dart';
 import 'package:adips/features/authentication/screens/login/login.dart';
 import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
 import 'package:adips/features/authentication/screens/register/register.dart';
@@ -22,8 +23,16 @@ class App extends StatelessWidget {
       darkTheme: AdipsAppTheme.darkTheme,
       home: const OnboardingScreen(),
       getPages: [
-        GetPage(name: '/login', page: () => const LoginScreen(), binding: LoginBinding()),
-        GetPage(name: '/register', page: () => const RegisterScreen()),
+        GetPage(
+          name: '/login',
+          page: () => const LoginScreen(),
+          binding: LoginBinding(),
+        ),
+        GetPage(
+          name: '/register',
+          page: () => const RegisterScreen(),
+          binding: RegisterBinding(),
+        ),
         GetPage(name: '/landing', page: () => const LandingScreen()),
       ],
     );

@@ -7,12 +7,24 @@ import 'package:adips/utils/validators/validation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-class RegisterForm extends StatelessWidget {
+class RegisterForm extends StatefulWidget {
   const RegisterForm({super.key});
 
   @override
+  State<RegisterForm> createState() => _RegisterFormState();
+}
+
+class _RegisterFormState extends State<RegisterForm> {
+  // Local UI-only state — kept out of Obx/GetX so toggling visibility
+  // doesn't tear down and rebuild the TextFormField's RenderEditable
+  // mid-frame, which was causing:
+  // "'attached': is not true" on RenderObject.getTransformTo.
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+
+  @override
   Widget build(BuildContext context) {
-    final controller = Get.put(RegisterController());
+    final controller = Get.find<RegisterController>();
 
     return Form(
       key: controller.formKey,
@@ -41,36 +53,36 @@ class RegisterForm extends StatelessWidget {
           const SizedBox(height: AdipsSizes.spaceBtwInputFields),
 
           // Password
-          Obx(
-                () => CustomTextField(
-              controller: controller.passwordController,
-              labelText: "Password",
-              hintText: "Create a password",
-              prefixIcon: Icons.lock_outline,
-              obscureText: controller.obscurePassword.value,
-              suffixIcon: controller.obscurePassword.value
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              onSuffixIconTap: controller.togglePasswordVisibility,
-              validator: AdipsValidator.validatePassword,
-            ),
+          CustomTextField(
+            controller: controller.passwordController,
+            labelText: "Password",
+            hintText: "Create a password",
+            prefixIcon: Icons.lock_outline,
+            obscureText: _obscurePassword,
+            suffixIcon: _obscurePassword
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+            onSuffixIconTap: () {
+              setState(() => _obscurePassword = !_obscurePassword);
+            },
+            validator: AdipsValidator.validatePassword,
           ),
           const SizedBox(height: AdipsSizes.spaceBtwInputFields),
 
           // Confirm password
-          Obx(
-                () => CustomTextField(
-              controller: controller.confirmPasswordController,
-              labelText: "Confirm Password",
-              hintText: "Re-enter your password",
-              prefixIcon: Icons.lock_outline,
-              obscureText: controller.obscureConfirmPassword.value,
-              suffixIcon: controller.obscureConfirmPassword.value
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              onSuffixIconTap: controller.toggleConfirmPasswordVisibility,
-              validator: controller.validateConfirmPassword,
-            ),
+          CustomTextField(
+            controller: controller.confirmPasswordController,
+            labelText: "Confirm Password",
+            hintText: "Re-enter your password",
+            prefixIcon: Icons.lock_outline,
+            obscureText: _obscureConfirmPassword,
+            suffixIcon: _obscureConfirmPassword
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+            onSuffixIconTap: () {
+              setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+            },
+            validator: controller.validateConfirmPassword,
           ),
           const SizedBox(height: AdipsSizes.spaceBtwSections),
 
@@ -92,7 +104,10 @@ class RegisterForm extends StatelessWidget {
                 const Text("Already have an account?"),
                 CustomTextLinkButton(
                   text: "Login",
-                  onPressed: () => Get.back(),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    Get.back();
+                  },
                 ),
               ],
             ),
