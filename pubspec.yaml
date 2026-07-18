@@ -1,0 +1,45 @@
+name: adips
+description: "App that helps you to manage all your persional finance"
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.1
+
+#PACKAGES
+dependencies:
+  flutter:
+    sdk: flutter
+  get: ^4.7.3
+  smooth_page_indicator: ^2.0.1
+  iconsax: ^0.0.8
+
+    #UTILITY PACKAGES
+
+    #ICONS
+
+    #STATE MANAGEMENT
+
+    #PRODUCT SPECIFIC
+
+    #PACKAGES END
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.4.8
+  smooth_page_indicator: ^2.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/logos/
+    - assets/icons/
+    - assets/icons/brands/
+    - assets/images/
+    - assets/images/onboard_images/
+
+  #LOCAL FONTS
