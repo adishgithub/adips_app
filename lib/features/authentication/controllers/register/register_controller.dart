@@ -42,7 +42,6 @@ class RegisterController extends GetxController {
 
     try {
       // POST https://adips-backend.onrender.com/signup
-      // Backend expects "name", not "fullName".
       final response = await AdipsHttpHelper.post('/signup', {
         'name': fullNameController.text.trim(),
         'email': emailController.text.trim(),

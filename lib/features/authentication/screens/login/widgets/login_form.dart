@@ -7,12 +7,18 @@ import 'package:adips/utils/validators/validation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-class LoginForm extends StatelessWidget {
+class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
+  @override
+  State<LoginForm> createState() => _LoginFormState();
+}
+
+class _LoginFormState extends State<LoginForm> {
+  bool _obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(LoginController());
+    final controller = Get.find<LoginController>();
 
     return Form(
       key: controller.formKey,
@@ -48,12 +54,12 @@ class LoginForm extends StatelessWidget {
           const SizedBox(height: AdipsSizes.sm),
 
           // Forgot password
-          CustomTextLinkButton(
-            text: "Forgot password?",
-            onPressed: () {
-              // TODO: Navigate to forgot password screen
-            },
-          ),
+          // CustomTextLinkButton(
+          //   text: "Forgot password?",
+          //   onPressed: () {
+          //     // TODO: Navigate to forgot password screen
+          //   },
+          // ),
           const SizedBox(height: AdipsSizes.spaceBtwItems),
 
           // Login button

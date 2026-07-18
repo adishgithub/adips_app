@@ -11,7 +11,7 @@ class LoginController extends GetxController {
   final passwordController = TextEditingController();
 
   RxBool isLoading = false.obs;
-  RxBool obscurePassword = true.obs;
+  // RxBool obscurePassword = true.obs;
 
   void togglePasswordVisibility() {
     obscurePassword.value = !obscurePassword.value;
