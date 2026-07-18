@@ -1,0 +1,49 @@
+.
+├── adips.iml
+├── analysis_options.yaml
+├── assets
+│   ├── fonts
+│   ├── icons
+│   │   └── brands
+│   ├── images
+│   │   ├── Horizontal_logo_dark.png
+│   │   ├── Horizontal_logo_light.png
+│   │   └── onboard_images
+│   └── logos
+│       ├── dark_full_logo.png
+│       ├── full_logo_dark.png
+│       ├── full_logo_light.png
+│       └── light_full_logo.png
+├── lib
+│   ├── app.dart
+│   ├── bindings
+│   ├── common
+│   │   ├── styles
+│   │   └── widgets
+│   ├── data
+│   │   ├── repositories
+│   │   └── services
+│   ├── features
+│   │   ├── authentication
+│   │   └── personalization
+│   ├── localization
+│   ├── main.dart
+│   ├── screens
+│   │   └── Dashboard.dart
+│   └── utils
+│       ├── constants
+│       ├── device
+│       ├── formatters
+│       ├── helpers
+│       ├── http
+│       ├── local_storage
+│       ├── logging
+│       ├── theme
+│       └── validators
+├── project_structure.txt
+├── pubspec.lock
+├── pubspec.yaml
+├── README.md
+└── splash.yaml
+
+31 directories, 16 files
