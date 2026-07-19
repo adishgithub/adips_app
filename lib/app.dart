@@ -1,7 +1,7 @@
 import 'package:adips/features/authentication/controllers/login/login_binding.dart';
 import 'package:adips/features/authentication/controllers/register/register_binding.dart';
+import 'package:adips/features/authentication/screens/auth_gate/auth_gate.dart';
 import 'package:adips/features/authentication/screens/login/login.dart';
-import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
 import 'package:adips/features/authentication/screens/register/register.dart';
 import 'package:adips/features/dashboard/screens/landing/landing.dart';
 import 'package:adips/utils/theme/adips_app_theme.dart';
@@ -21,7 +21,7 @@ class App extends StatelessWidget {
       themeMode: ThemeMode.system,
       theme: AdipsAppTheme.lightTheme,
       darkTheme: AdipsAppTheme.darkTheme,
-      home: const OnboardingScreen(),
+      home: const AuthGate(),
       getPages: [
         GetPage(
           name: '/login',

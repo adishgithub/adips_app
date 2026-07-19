@@ -15,23 +15,31 @@ class LoginForm extends StatefulWidget {
 }
 
 class _LoginFormState extends State<LoginForm> {
-  // Local UI-only state. Kept out of Obx/GetX so toggling it doesn't tear
-  // down and rebuild the TextFormField's RenderEditable mid-frame, which
-  // was causing: "'attached': is not true" on RenderObject.getTransformTo.
+
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<LoginController>();
 
     return Form(
-      key: controller.formKey,
+      key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Email
           CustomTextField(
-            controller: controller.emailController,
+            controller: _emailController,
             labelText: "Email",
             hintText: "Enter your email",
             prefixIcon: Icons.email_outlined,
@@ -42,7 +50,7 @@ class _LoginFormState extends State<LoginForm> {
 
           // Password
           CustomTextField(
-            controller: controller.passwordController,
+            controller: _passwordController,
             labelText: "Password",
             hintText: "Enter your password",
             prefixIcon: Icons.lock_outline,
@@ -71,7 +79,11 @@ class _LoginFormState extends State<LoginForm> {
                 () => CustomButton(
               text: "Login",
               isLoading: controller.isLoading.value,
-              onPressed: controller.login,
+              onPressed: () => controller.login(
+                formKey: _formKey,
+                email: _emailController.text.trim(),
+                password: _passwordController.text,
+              ),
             ),
           ),
           const SizedBox(height: AdipsSizes.spaceBtwItems),

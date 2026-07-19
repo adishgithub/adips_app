@@ -5,34 +5,18 @@ import 'package:get/get.dart';
 class RegisterController extends GetxController {
   static RegisterController get instance => Get.find();
 
-  final formKey = GlobalKey<FormState>();
-  final emailController = TextEditingController();
-  final fullNameController = TextEditingController();
-  final passwordController = TextEditingController();
-  final confirmPasswordController = TextEditingController();
-
   RxBool isLoading = false.obs;
 
-  String? validateConfirmPassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please confirm your password';
-    }
-    if (value != passwordController.text) {
-      return 'Passwords do not match';
-    }
-    return null;
-  }
-
-  Future<void> register() async {
+  Future<void> register({
+    required GlobalKey<FormState> formKey,
+    required String name,
+    required String email,
+    required String password,
+  }) async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
-    // Dismiss the keyboard/caret before doing anything that might rebuild
-    // or replace this screen. Without this, a pending caret-position frame
-    // callback can fire against a TextFormField that's already been torn
-    // down by navigation, throwing:
-    // "'attached': is not true" on RenderObject.getTransformTo.
     FocusManager.instance.primaryFocus?.unfocus();
 
     isLoading.value = true;
@@ -40,9 +24,9 @@ class RegisterController extends GetxController {
     try {
       // POST https://adips-backend.onrender.com/signup
       final response = await AdipsHttpHelper.post('/signup', {
-        'name': fullNameController.text.trim(),
-        'email': emailController.text.trim(),
-        'password': passwordController.text,
+        'name': name,
+        'email': email,
+        'password': password,
       });
 
       // Response shape: {success, message, user: {id, name, email}}
@@ -64,14 +48,5 @@ class RegisterController extends GetxController {
     } finally {
       isLoading.value = false;
     }
-  }
-
-  @override
-  void onClose() {
-    emailController.dispose();
-    fullNameController.dispose();
-    passwordController.dispose();
-    confirmPasswordController.dispose();
-    super.onClose();
   }
 }

@@ -6,22 +6,17 @@ import 'package:get/get.dart';
 class LoginController extends GetxController {
   static LoginController get instance => Get.find();
 
-  final formKey = GlobalKey<FormState>();
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
-
   RxBool isLoading = false.obs;
 
-  Future<void> login() async {
+  Future<void> login({
+    required GlobalKey<FormState> formKey,
+    required String email,
+    required String password,
+  }) async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
-    // Dismiss the keyboard/caret before doing anything that might rebuild
-    // or replace this screen. Without this, a pending caret-position frame
-    // callback can fire against a TextFormField that's already been torn
-    // down by navigation, throwing:
-    // "'attached': is not true" on RenderObject.getTransformTo.
     FocusManager.instance.primaryFocus?.unfocus();
 
     isLoading.value = true;
@@ -29,8 +24,8 @@ class LoginController extends GetxController {
     try {
       // POST https://adips-backend.onrender.com/login
       final loginResponse = await AdipsHttpHelper.post('/login', {
-        'email': emailController.text.trim(),
-        'password': passwordController.text,
+        'email': email,
+        'password': password,
       });
 
       final String? token = loginResponse['token'] as String?;
@@ -56,7 +51,7 @@ class LoginController extends GetxController {
 
       Get.offAllNamed('/landing', arguments: {
         'fullName': fullName,
-        'email': emailController.text.trim(),
+        'email': email,
       });
     } catch (e) {
       Get.snackbar(
@@ -67,12 +62,5 @@ class LoginController extends GetxController {
     } finally {
       isLoading.value = false;
     }
-  }
-
-  @override
-  void onClose() {
-    emailController.dispose();
-    passwordController.dispose();
-    super.onClose();
   }
 }
