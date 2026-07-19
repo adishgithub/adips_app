@@ -22,14 +22,14 @@ class RegisterController extends GetxController {
     isLoading.value = true;
 
     try {
-      // POST https://adips-backend.onrender.com/signup
-      final response = await AdipsHttpHelper.post('/signup', {
+      // POST https://adips-backend.onrender.com/api/v1/users/signup
+      final response = await AdipsHttpHelper.post('/api/v1/users/signup', {
         'name': name,
         'email': email,
         'password': password,
       });
 
-      // Response shape: {success, message, user: {id, name, email}}
+      // Response shape: { success, message, data: { id, name, email } }
       Get.snackbar(
         'Success',
         'Account created! Please log in.',

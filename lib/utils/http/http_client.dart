@@ -6,6 +6,16 @@ import 'package:http/http.dart' as http;
 /// `http.get` / `http.post` directly, so headers, base URL, and error
 /// handling stay in one place.
 ///
+/// Backend routes are versioned under `/api/v1` (e.g. pass
+/// '/api/v1/users/login', not '/login').
+///
+/// Every response body follows the same envelope:
+///   { "success": bool, "message": string, "data": <payload>, "error"?: any }
+/// `_handleResponse` returns the decoded top-level map as-is (still
+/// containing "data"/"message"/etc) — call `AdipsHttpHelper.data(response)`
+/// to unwrap the actual payload instead of reaching into `response['data']`
+/// at every call site.
+///
 /// Note: the adips_backend auth middleware reads the token from a
 /// `Authorization` COOKIE, not a Bearer header. Since a Flutter app
 /// doesn't have a browser-style cookie jar, we pass the token back
@@ -47,6 +57,15 @@ class AdipsHttpHelper {
     } on http.ClientException {
       throw Exception('Could not reach the server. Check your connection.');
     }
+  }
+
+  /// Unwraps the `data` field from a decoded response envelope.
+  /// Every 2xx response from the backend is shaped like
+  /// `{"success":true,"message":"...","data": <payload>}` — call
+  /// sites should read the payload via this helper instead of
+  /// reaching into `response['data']` directly everywhere.
+  static Map<String, dynamic> data(Map<String, dynamic> response) {
+    return response['data'] as Map<String, dynamic>? ?? {};
   }
 
   /// Parses the response and throws a readable Exception on any

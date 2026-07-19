@@ -70,7 +70,7 @@ class LandingScreen extends StatelessWidget {
                 final token = AdipsLocalStorage.token;
                 try {
                   await AdipsHttpHelper.post(
-                    '/logout',
+                    '/api/v1/users/logout',
                     {},
                     cookie: token != null ? 'Authorization=$token' : null,
                   );

@@ -22,32 +22,24 @@ class LoginController extends GetxController {
     isLoading.value = true;
 
     try {
-      // POST https://adips-backend.onrender.com/login
-      final loginResponse = await AdipsHttpHelper.post('/login', {
+      // POST https://adips-backend.onrender.com/api/v1/users/login
+      // Response: { success, message, data: { token, user: { id, name, email } } }
+      final loginResponse = await AdipsHttpHelper.post('/api/v1/users/login', {
         'email': email,
         'password': password,
       });
 
-      final String? token = loginResponse['token'] as String?;
+      final data = AdipsHttpHelper.data(loginResponse);
+      final String? token = data['token'] as String?;
       if (token == null) {
         throw Exception('No token returned by server');
       }
       await AdipsLocalStorage.saveToken(token);
 
-      // The login response only contains a token, not the user's name,
-      // so fetch the full profile with a manually-attached auth cookie
-      // (see the note in http_client.dart on why it's a cookie, not Bearer).
-      String fullName = '';
-      try {
-        final validateResponse = await AdipsHttpHelper.get(
-          '/validate',
-          cookie: 'Authorization=$token',
-        );
-        final user = validateResponse['user'] as Map<String, dynamic>? ?? {};
-        fullName = (user['Name'] ?? user['name'] ?? '').toString();
-      } catch (_) {
-        // Non-fatal — proceed to landing even if /validate fails.
-      }
+      // Login already returns the user's name/email directly, so we
+      // no longer need a separate /validate round trip here.
+      final user = data['user'] as Map<String, dynamic>? ?? {};
+      final String fullName = (user['name'] ?? '').toString();
 
       Get.offAllNamed('/landing', arguments: {
         'fullName': fullName,

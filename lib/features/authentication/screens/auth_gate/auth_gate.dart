@@ -34,12 +34,12 @@ class _AuthGateState extends State<AuthGate> {
 
     try {
       final validateResponse = await AdipsHttpHelper.get(
-        '/validate',
+        '/api/v1/users/validate',
         cookie: 'Authorization=$token',
       );
-      final user = validateResponse['user'] as Map<String, dynamic>? ?? {};
-      final fullName = (user['Name'] ?? user['name'] ?? '').toString();
-      final email = (user['Email'] ?? user['email'] ?? '').toString();
+      final user = AdipsHttpHelper.data(validateResponse);
+      final fullName = (user['name'] ?? '').toString();
+      final email = (user['email'] ?? '').toString();
 
       Get.offAllNamed('/landing', arguments: {
         'fullName': fullName,
