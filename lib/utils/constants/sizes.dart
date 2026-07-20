@@ -15,9 +15,9 @@ class AdipsSizes {
   static const double iconLg = 32.0;
 
   //Logo Sizes
-  static const double logoSm = 64;
-  static const double logoMd = 100;
-  static const double logolg = 200;
+  static const double logoXs = 50;
+  static const double logoSm = 100;
+  static const double logoMd = 150;
 
   //Font sizes
   static const double fontSizesSm = 14.0;

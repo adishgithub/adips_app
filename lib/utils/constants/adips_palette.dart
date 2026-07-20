@@ -7,6 +7,53 @@ import 'package:flutter/material.dart';
 class AdipsPalette {
   AdipsPalette._();
 
+  // ── Light ───────────────────────────────────────
+
+  // Basic color palette
+  static const Color lightBackground = Color(0xFFF8FAFC);
+
+  // logo text colour
+  static const Color lightPrimaryBrandText = Color(0xFF0C4E3A);
+  static const Color lightSubtext = Color(0xFF506575);
+
+  // Text Fields
+  static const Color lightTextField = Color(0xFFFFFFFF);
+  static const Color lightTextFieldPlaceHolderText = Color(0xFFA0B0BA);
+
+  // link buttons
+  static const Color lightLinkButton = Color(0xFF0B5B3E);
+
+  // primary buttons
+  static const Color lightPrimaryButtonBackground = Color(0xFF0F533E);
+  static const Color lightPrimaryButtonText = Color(0xFFFFFFFF);
+
+  // lines
+  static const Color lightLine = Color(0xFF0C4E3A);
+
+  // ── Dark ───────────────────────────────────────
+
+  // Basic color palette
+  static const Color darkBackground = Color(0xFF0B1519);
+
+  // logo text colour
+  static const Color darkPrimaryBrandText = Color(0xFF259962);
+  static const Color darkSubtext = Color(0xFF8596A0);
+
+  // Text Fields
+  static const Color darkTextField = Color(0xFF0F1D22);
+  static const Color darkTextFieldPlaceHolderText = Color(0xFF4B5E67);
+
+  // link buttons
+  static const Color darkLinkButton = Color(0xFF208F5A);
+
+  // primary buttons
+  static const Color darkPrimaryButtonBackground = Color(0xFF258b5b);
+  static const Color darkPrimaryButtonText = Color(0xFFFFFFFF);
+
+  // lines
+  static const Color darkLine = Color(0xFF259962);
+
+
   // ── Light ──────────────────────────────────────
   static const Color lightCanvas = Color(0xFFF7F9FC);
   static const Color lightSurface = Color(0xFFFFFFFF);

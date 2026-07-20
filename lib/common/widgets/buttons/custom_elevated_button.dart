@@ -1,6 +1,9 @@
 import 'package:adips/utils/constants/sizes.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/constants/adips_palette.dart';
+import '../../../utils/helpers/helper_functions.dart';
+
 /// A basic, reusable primary/elevated button.
 /// No dark/light mode handling — plain fixed colors only.
 class CustomButton extends StatelessWidget {
@@ -19,15 +22,18 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+
     return SizedBox(
       width: width,
       height: 50,
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue,
+          backgroundColor: isDark ? AdipsPalette.darkPrimaryButtonBackground : AdipsPalette.lightPrimaryButtonBackground,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.blue.withOpacity(0.5),
+          disabledBackgroundColor: AdipsPalette.darkPrimaryButtonBackground.withOpacity(0.5),
           padding: const EdgeInsets.symmetric(vertical: AdipsSizes.sm),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AdipsSizes.buttonRadius),

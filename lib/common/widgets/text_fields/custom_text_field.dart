@@ -1,6 +1,9 @@
 import 'package:adips/utils/constants/sizes.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/constants/adips_palette.dart';
+import '../../../utils/helpers/helper_functions.dart';
+
 /// A basic, reusable text field.
 /// No dark/light mode handling — plain fixed colors only.
 class CustomTextField extends StatelessWidget {
@@ -29,6 +32,9 @@ class CustomTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -45,22 +51,22 @@ class CustomTextField extends StatelessWidget {
         )
             : null,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AdipsSizes.md,
           vertical: AdipsSizes.md,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: const BorderSide(color: Colors.grey),
+          borderSide: BorderSide(color: isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField,),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: const BorderSide(color: Colors.grey),
+          borderSide: BorderSide(color: isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: const BorderSide(color: Colors.blue, width: 1.5),
+          borderSide: BorderSide(color: isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),

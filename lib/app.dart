@@ -1,18 +1,23 @@
 import 'package:adips/features/authentication/controllers/login/login_binding.dart';
 import 'package:adips/features/authentication/controllers/register/register_binding.dart';
-import 'package:adips/features/authentication/screens/auth_gate/auth_gate.dart';
 import 'package:adips/features/authentication/screens/login/login.dart';
+import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
 import 'package:adips/features/authentication/screens/register/register.dart';
 import 'package:adips/features/dashboard/screens/landing/landing.dart';
+import 'package:adips/utils/startup/start_destination.dart';
 import 'package:adips/utils/theme/adips_app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:get/get.dart';
 import 'package:get/get_navigation/src/root/get_material_app.dart';
 import 'package:get/get_navigation/src/routes/get_route.dart';
 
 /// -- Use This class to setup themes, initial binding, any animation and much more
 
 class App extends StatelessWidget {
-  const App({super.key});
+  const App({super.key, required this.startDestination});
+
+  final StartDestination startDestination;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +26,7 @@ class App extends StatelessWidget {
       themeMode: ThemeMode.system,
       theme: AdipsAppTheme.lightTheme,
       darkTheme: AdipsAppTheme.darkTheme,
-      home: const AuthGate(),
+      home: _StartupRouter(destination: startDestination),
       getPages: [
         GetPage(
           name: '/login',
@@ -35,6 +40,53 @@ class App extends StatelessWidget {
         ),
         GetPage(name: '/landing', page: () => const LandingScreen()),
       ],
+    );
+  }
+}
+
+/// Forwards straight to the resolved start screen using normal GetX
+/// navigation (so route bindings/arguments work exactly like any other
+/// navigation), then removes the native splash. The native splash (see
+/// splash.yaml / main.dart) stays on screen the entire time this happens,
+/// so the user never actually sees this widget — it's covered the whole
+/// time, and the background here matches the splash background as a
+/// fallback in case a frame renders before the redirect fires.
+class _StartupRouter extends StatefulWidget {
+  const _StartupRouter({required this.destination});
+
+  final StartDestination destination;
+
+  @override
+  State<_StartupRouter> createState() => _StartupRouterState();
+}
+
+class _StartupRouterState extends State<_StartupRouter> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _redirect());
+  }
+
+  void _redirect() {
+    switch (widget.destination.route) {
+      case StartRoute.onboarding:
+        Get.offAll(() => const OnboardingScreen());
+        break;
+      case StartRoute.login:
+        Get.offAllNamed('/login');
+        break;
+      case StartRoute.landing:
+        Get.offAllNamed('/landing', arguments: widget.destination.arguments);
+        break;
+    }
+    FlutterNativeSplash.remove();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121A26) : const Color(0xFFF7F9FC),
     );
   }
 }
