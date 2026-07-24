@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../../../utils/constants/adips_palette.dart';
 import '../../../../../utils/helpers/helper_functions.dart';
 
-class LoginHeader extends StatelessWidget {
-  const LoginHeader({super.key});
+class LoginRegisterHeader extends StatelessWidget {
+  const LoginRegisterHeader({super.key});
 
   @override
   Widget build(BuildContext context) {

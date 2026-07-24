@@ -63,15 +63,15 @@ class _LoginFormState extends State<LoginForm> {
             },
             validator: AdipsValidator.validatePassword,
           ),
-          const SizedBox(height: AdipsSizes.sm),
+          const SizedBox(height: AdipsSizes.lg),
 
           // Forgot password
-          CustomTextLinkButton(
-            text: "Forgot password?",
-            onPressed: () {
-              // TODO: Navigate to forgot password screen
-            },
-          ),
+          // CustomTextLinkButton(
+          //   text: "Forgot password?",
+          //   onPressed: () {
+          //     // TODO: Navigate to forgot password screen
+          //   },
+          // ),
           const SizedBox(height: AdipsSizes.spaceBtwItems),
 
           // Login button

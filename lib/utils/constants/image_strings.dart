@@ -15,4 +15,8 @@ class AdipsImages {
   static const String onBoardingImageDark2 = "assets/images/onboard_images/onboard_screen2_dark.png";
   static const String onBoardingImageLight3 = "assets/images/onboard_images/onboard_screen3_light.png";
   static const String onBoardingImageDark3 = "assets/images/onboard_images/onboard_screen3_dark.png";
+
+  static const String backgroundImageGraphicsTop = "assets/images/login_signup_background_top.png";
+  static const String backgroundImageGraphicsBottom = "assets/images/login_signup_background_bottom.png";
+
 }

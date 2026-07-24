@@ -42,6 +42,12 @@ class CustomTextField extends StatelessWidget {
       validator: validator,
       decoration: InputDecoration(
         labelText: labelText,
+        labelStyle: TextStyle(
+          color: isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText
+        ),
+        floatingLabelStyle: TextStyle(
+            color: isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText
+        ),
         hintText: hintText,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
         suffixIcon: suffixIcon != null
@@ -58,7 +64,7 @@ class CustomTextField extends StatelessWidget {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: BorderSide(color: isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField,),
+          borderSide: BorderSide(color: isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
