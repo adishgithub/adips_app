@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import '../../../utils/constants/adips_palette.dart';
 import '../../../utils/helpers/helper_functions.dart';
 
-/// A basic, reusable primary/elevated button.
-/// No dark/light mode handling — plain fixed colors only.
 class CustomButton extends StatelessWidget {
   const CustomButton({
     super.key,
@@ -22,23 +20,42 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+
+    final Color bgColor = isDark
+        ? AdipsPalette.darkPrimaryButtonBackground
+        : AdipsPalette.lightPrimaryButtonBackground;
+
+    final Color shadowColor = isDark
+        ? Colors.black.withOpacity(0.5)
+        : AdipsPalette.lightPrimaryButtonBackground.withOpacity(0.4);
 
     return SizedBox(
       width: width,
       height: 50,
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isDark ? AdipsPalette.darkPrimaryButtonBackground : AdipsPalette.lightPrimaryButtonBackground,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: AdipsPalette.darkPrimaryButtonBackground.withOpacity(0.5),
-          padding: const EdgeInsets.symmetric(vertical: AdipsSizes.sm),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AdipsSizes.buttonRadius),
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return bgColor.withOpacity(0.5);
+            }
+            return bgColor;
+          }),
+          foregroundColor: const WidgetStatePropertyAll(Colors.white),
+          overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          shadowColor: WidgetStatePropertyAll(shadowColor),
+          elevation: const WidgetStatePropertyAll(AdipsSizes.buttonElevation),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: AdipsSizes.sm),
           ),
-          elevation: AdipsSizes.buttonElevation,
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AdipsSizes.buttonRadius),
+              side: BorderSide.none,
+            ),
+          ),
         ),
         child: isLoading
             ? const SizedBox(

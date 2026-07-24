@@ -41,7 +41,7 @@ class LoginController extends GetxController {
       final user = data['user'] as Map<String, dynamic>? ?? {};
       final String fullName = (user['name'] ?? '').toString();
 
-      Get.offAllNamed('/landing', arguments: {
+      Get.offAllNamed('/home', arguments: {
         'fullName': fullName,
         'email': email,
       });

@@ -3,7 +3,6 @@ import 'package:adips/features/authentication/controllers/register/register_bind
 import 'package:adips/features/authentication/screens/login/login.dart';
 import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
 import 'package:adips/features/authentication/screens/register/register.dart';
-import 'package:adips/features/dashboard/screens/landing/landing.dart';
 import 'package:adips/utils/startup/start_destination.dart';
 import 'package:adips/utils/theme/adips_app_theme.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +10,8 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:get/get.dart';
 import 'package:get/get_navigation/src/root/get_material_app.dart';
 import 'package:get/get_navigation/src/routes/get_route.dart';
+
+import 'features/authentication/screens/homepage/home.dart';
 
 /// -- Use This class to setup themes, initial binding, any animation and much more
 
@@ -38,7 +39,7 @@ class App extends StatelessWidget {
           page: () => const RegisterScreen(),
           binding: RegisterBinding(),
         ),
-        GetPage(name: '/landing', page: () => const LandingScreen()),
+        GetPage(name: '/home', page: () => const HomeScreen()),
       ],
     );
   }

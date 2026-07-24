@@ -49,35 +49,40 @@ class CustomTextField extends StatelessWidget {
             color: isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText
         ),
         hintText: hintText,
-        prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+        prefixIcon: prefixIcon != null ? Icon(prefixIcon,color: isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText) : null,
         suffixIcon: suffixIcon != null
             ? IconButton(
           icon: Icon(suffixIcon),
           onPressed: onSuffixIconTap,
+          color: isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText,
         )
             : null,
         filled: true,
         fillColor: isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: AdipsSizes.md,
-          vertical: AdipsSizes.md,
+          horizontal: AdipsSizes.inputFieldContentPadding,
+          vertical: AdipsSizes.inputFieldContentPadding,
         ),
-        border: OutlineInputBorder(
+        border: UnderlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
           borderSide: BorderSide(color: isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField),
         ),
-        enabledBorder: OutlineInputBorder(
+        enabledBorder: UnderlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
           borderSide: BorderSide(color: isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine),
         ),
-        focusedBorder: OutlineInputBorder(
+        focusedBorder: UnderlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
           borderSide: BorderSide(color: isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine, width: 1.5),
         ),
-        errorBorder: OutlineInputBorder(
+        errorBorder: UnderlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
           borderSide: const BorderSide(color: Colors.red),
         ),
+        focusedErrorBorder: UnderlineInputBorder(
+          borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
+          borderSide: const BorderSide(color: Colors.red)
+        )
       ),
     );
   }

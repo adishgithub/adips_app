@@ -1,3 +1,4 @@
+// lib/features/authentication/screens/login/login.dart
 import 'package:adips/features/authentication/screens/login/widgets/login_form.dart';
 import 'package:adips/features/authentication/screens/login/widgets/login_header.dart';
 import 'package:adips/utils/constants/sizes.dart';
@@ -13,6 +14,7 @@ class LoginScreen extends StatelessWidget {
       context, // required positional arg
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min, // important: Column no longer needs to fill infinite height
         children: [
           LoginRegisterHeader(),
           SizedBox(height: AdipsSizes.spaceBtwSections),

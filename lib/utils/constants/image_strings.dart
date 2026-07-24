@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 class AdipsImages {
   //App Logos
   static const String darkAppLogo = "assets/logos/dark_full_logo.png";
