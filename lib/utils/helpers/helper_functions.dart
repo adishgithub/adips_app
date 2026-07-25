@@ -1,6 +1,7 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
+
 
 class AdipsHelperFunctions {
   static bool isDarkMode(BuildContext context) {
@@ -17,5 +18,15 @@ class AdipsHelperFunctions {
 
   static double screenWidth() {
     return MediaQuery.of(Get.context!).size.width;
+  }
+}
+
+class AdipsFormatters {
+  static String formatCurrency(double amount) {
+    final formatter = NumberFormat.decimalPatternDigits(
+      locale: 'en_IN',
+      decimalDigits: 2,
+    );
+    return formatter.format(amount);
   }
 }

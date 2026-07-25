@@ -6,6 +6,13 @@ class AdipsSizes {
   static const double lg = 24.0;
   static const double xl = 32.0;
 
+  // padding
+  static const double minPaddingTop = 50;
+  static const double minPaddingLeft = 20;
+  static const double minPaddingRight = 20;
+  static const double minPaddingBottom = 40;
+  static const double minPaddingAll = 20;
+
   //Icon Sizes
   static const double iconXs = 12.0;
   static const double iconSm = 16.0;
@@ -18,9 +25,12 @@ class AdipsSizes {
   static const double logoMd = 150;
 
   //Font sizes
+  static const double fontSizesEs = 12.0;
   static const double fontSizesSm = 14.0;
   static const double fontSizesMd = 16.0;
   static const double fontSizesLg = 18.0;
+  static const double fontSizesEl = 20.0;
+  static const double fontSizesXxl = 22.0;
 
   //button sizes
   static const double buttonHeight = 18.0;
@@ -29,18 +39,20 @@ class AdipsSizes {
   static const double buttonElevation = 4.0;
 
   //AppBar Height
-  static const double appBarHeight = 56.0;
+  static const double appBarHeight = 70.0;
 
   //image sizes
   static const double imageThumbSize = 80.0;
 
   //default spacing between sections
+  static const double spaceBtwFontsEs = 2;
+  static const double spaceBtwFontsSm = 5;
   static const double defaultSpace = 24.0;
   static const double spaceBtwItems = 16.0;
   static const double spaceBtwSections = 32.0;
 
   //border radius
-  static const double borderRadiusSm = 4.0;
+  static const double borderRadiusSm = 5.0;
   static const double borderRadiusMd = 8.0;
   static const double borderRadiusLg = 12.0;
 

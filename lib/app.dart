@@ -69,18 +69,24 @@ class _StartupRouterState extends State<_StartupRouter> {
   }
 
   void _redirect() {
-    switch (widget.destination.route) {
-      case StartRoute.onboarding:
-        Get.offAll(() => const OnboardingScreen());
-        break;
-      case StartRoute.login:
-        Get.offAllNamed('/login');
-        break;
-      case StartRoute.landing:
-        Get.offAllNamed('/landing', arguments: widget.destination.arguments);
-        break;
+    try {
+      switch (widget.destination.route) {
+        case StartRoute.onboarding:
+          Get.offAll(() => const OnboardingScreen());
+          break;
+        case StartRoute.login:
+          Get.offAllNamed('/login');
+          break;
+        case StartRoute.home:
+          Get.offAllNamed('/home', arguments: widget.destination.arguments);
+          break;
+      }
+    } finally {
+      // Always remove the splash, even if navigation above throws for any
+      // reason (bad/unregistered route, etc.) — the user should never get
+      // stuck staring at the splash screen.
+      FlutterNativeSplash.remove();
     }
-    FlutterNativeSplash.remove();
   }
 
   @override

@@ -2,7 +2,7 @@ import 'package:adips/utils/http/http_client.dart';
 import 'package:adips/utils/local_storage/storage_utility.dart';
 
 /// Where the app should land once startup checks are done.
-enum StartRoute { onboarding, login, landing }
+enum StartRoute { onboarding, login, home }
 
 class StartDestination {
   final StartRoute route;
@@ -13,7 +13,7 @@ class StartDestination {
 
 /// Decides where to send the user on launch:
 /// - No saved token           -> Onboarding (first run, or logged out)
-/// - Saved token still valid  -> straight to Landing (skip onboarding/login)
+/// - Saved token still valid  -> straight to Home (skip onboarding/login)
 /// - Saved token expired/bad  -> Login (skip onboarding — they already have
 ///                                an account, just need to sign back in)
 ///
@@ -36,7 +36,7 @@ Future<StartDestination> resolveStartDestination() async {
     final email = (user['email'] ?? '').toString();
 
     return StartDestination(
-      StartRoute.landing,
+      StartRoute.home,
       arguments: {'fullName': fullName, 'email': email},
     );
   } catch (_) {

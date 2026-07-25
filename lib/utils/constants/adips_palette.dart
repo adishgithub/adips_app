@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 class AdipsPalette {
   AdipsPalette._();
 
+  static const Color shadowColor = Color(0xFF000000);
+
+
   // ── Light ───────────────────────────────────────
 
   // Basic color palette
@@ -28,7 +31,7 @@ class AdipsPalette {
   static const Color lightPrimaryButtonText = Color(0xFFFFFFFF);
 
   // lines
-  static const Color lightLine = Color(0xFF0C4E3A);
+  static const Color lightLine = Color(0xFFF0F1F3);
 
   // ── Dark ───────────────────────────────────────
 
@@ -51,7 +54,7 @@ class AdipsPalette {
   static const Color darkPrimaryButtonText = Color(0xFFFFFFFF);
 
   // lines
-  static const Color darkLine = Color(0xFF259962);
+  static const Color darkLine = Color(0xFF1A1D22);
 
 
   // ── Light ──────────────────────────────────────
