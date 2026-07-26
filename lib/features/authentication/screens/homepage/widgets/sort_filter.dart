@@ -91,12 +91,16 @@ class _SortFilterState extends State<SortFilter> {
           children: [
             Icon(Icons.swap_vert_rounded, size: 16, color: brandColor),
             const SizedBox(width: 8),
-            Text(
-              _selected.label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: textColor,
+            Flexible(
+              child: Text(
+                _selected.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: textColor,
+                ),
               ),
             ),
             const SizedBox(width: 4),
