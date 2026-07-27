@@ -59,6 +59,37 @@ class AdipsHttpHelper {
     }
   }
 
+  static Future<Map<String, dynamic>> patch(
+      String endpoint,
+      Map<String, dynamic> body, {
+        String? cookie,
+      }) async {
+    final url = Uri.parse('$_baseUrl$endpoint');
+    try {
+      final response = await http
+          .patch(url, headers: _headers(cookie: cookie), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15));
+      return _handleResponse(response);
+    } on http.ClientException {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+  }
+
+  static Future<Map<String, dynamic>> delete(
+      String endpoint, {
+        String? cookie,
+      }) async {
+    final url = Uri.parse('$_baseUrl$endpoint');
+    try {
+      final response = await http
+          .delete(url, headers: _headers(cookie: cookie))
+          .timeout(const Duration(seconds: 15));
+      return _handleResponse(response);
+    } on http.ClientException {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+  }
+
   /// Unwraps the `data` field from a decoded response envelope.
   /// Every 2xx response from the backend is shaped like
   /// `{"success":true,"message":"...","data": <payload>}` — call
@@ -66,6 +97,18 @@ class AdipsHttpHelper {
   /// reaching into `response['data']` directly everywhere.
   static Map<String, dynamic> data(Map<String, dynamic> response) {
     return response['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  /// Same as [data] but for endpoints whose `data` field is a JSON
+  /// array (e.g. GET /transactions) rather than an object.
+  static List<dynamic> listData(Map<String, dynamic> response) {
+    return response['data'] as List<dynamic>? ?? [];
+  }
+
+  /// Unwraps the `meta` field (pagination info) from a decoded
+  /// response envelope.
+  static Map<String, dynamic> meta(Map<String, dynamic> response) {
+    return response['meta'] as Map<String, dynamic>? ?? {};
   }
 
   /// Parses the response and throws a readable Exception on any

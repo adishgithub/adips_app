@@ -1,0 +1,1775 @@
+diff --git a/lib/app.dart b/lib/app.dart
+index 60ea89d..0eff6c6 100644
+--- a/lib/app.dart
++++ b/lib/app.dart
+@@ -1,8 +1,11 @@
++import 'package:adips/features/authentication/controllers/home/home_binding.dart';
+ import 'package:adips/features/authentication/controllers/login/login_binding.dart';
+ import 'package:adips/features/authentication/controllers/register/register_binding.dart';
+ import 'package:adips/features/authentication/screens/login/login.dart';
+ import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
+ import 'package:adips/features/authentication/screens/register/register.dart';
++import 'package:adips/features/settings/screens/settings_screen.dart';
++import 'package:adips/screens/Dashboard.dart';
+ import 'package:adips/utils/startup/start_destination.dart';
+ import 'package:adips/utils/theme/adips_app_theme.dart';
+ import 'package:flutter/material.dart';
+@@ -39,7 +42,13 @@ class App extends StatelessWidget {
+           page: () => const RegisterScreen(),
+           binding: RegisterBinding(),
+         ),
+-        GetPage(name: '/home', page: () => const HomeScreen()),
++        GetPage(
++          name: '/home',
++          page: () => const HomeScreen(),
++          binding: HomeBinding(),
++        ),
++        GetPage(name: '/settings', page: () => const SettingsScreen()),
++        GetPage(name: '/dashboard', page: () => const Dashboard()),
+       ],
+     );
+   }
+diff --git a/lib/features/authentication/controllers/home/home_binding.dart b/lib/features/authentication/controllers/home/home_binding.dart
+new file mode 100644
+index 0000000..8e7436a
+--- /dev/null
++++ b/lib/features/authentication/controllers/home/home_binding.dart
+@@ -0,0 +1,13 @@
++import 'package:adips/features/authentication/controllers/home/home_controller.dart';
++import 'package:get/get.dart';
++
++/// Ties [HomeController]'s creation/disposal to the '/home' route.
++/// `fenix: true` so GetX transparently recreates it if it's ever
++/// looked up again after being disposed (e.g. after logging out and
++/// back in), instead of handing back a stale instance.
++class HomeBinding extends Bindings {
++  @override
++  void dependencies() {
++    Get.lazyPut<HomeController>(() => HomeController(), fenix: true);
++  }
++}
+diff --git a/lib/features/authentication/controllers/home/home_controller.dart b/lib/features/authentication/controllers/home/home_controller.dart
+new file mode 100644
+index 0000000..57e527b
+--- /dev/null
++++ b/lib/features/authentication/controllers/home/home_controller.dart
+@@ -0,0 +1,245 @@
++import 'package:adips/features/authentication/screens/homepage/widgets/sort_filter.dart';
++import 'package:adips/utils/http/http_client.dart';
++import 'package:adips/utils/local_storage/storage_utility.dart';
++import 'package:adips/utils/models/app_transaction.dart';
++import 'package:adips/utils/services/transaction_api.dart';
++import 'package:flutter/material.dart';
++import 'package:get/get.dart';
++
++/// Owns every piece of state the home screen shows: the logged-in
++/// user's name/email, the account balance + summary, and the list of
++/// transactions (plus search/sort/date-range applied to it locally).
++///
++/// All backend calls go through [TransactionApi]; this controller's
++/// job is state + orchestration, not HTTP details.
++class HomeController extends GetxController {
++  static HomeController get instance => Get.find();
++
++  final RxString fullName = ''.obs;
++  final RxString email = ''.obs;
++
++  final Rx<TransactionSummary> summary = TransactionSummary.empty.obs;
++  final RxList<AppTransaction> transactions = <AppTransaction>[].obs;
++
++  final RxBool isLoading = false.obs;
++  final RxBool isMutating = false.obs; // create/update/delete in flight
++
++  final RxString searchQuery = ''.obs;
++  final Rx<SortOption> sortOption = SortOption.newestFirst.obs;
++  final Rx<DateTimeRange?> selectedRange = Rx<DateTimeRange?>(null);
++
++  @override
++  void onInit() {
++    super.onInit();
++    _loadUserFromArguments();
++    loadAll();
++  }
++
++  /// The name/email are normally handed off by LoginController /
++  /// resolveStartDestination via Get.arguments when the app routes to
++  /// '/home'. If they're missing for any reason (e.g. a hot restart
++  /// mid-session, or navigating here some other way), fall back to
++  /// asking the backend who the current token belongs to instead of
++  /// showing a blank greeting.
++  Future<void> _loadUserFromArguments() async {
++    final args = Get.arguments as Map<String, dynamic>?;
++    final argName = (args?['fullName'] ?? '').toString();
++    final argEmail = (args?['email'] ?? '').toString();
++
++    if (argName.isNotEmpty || argEmail.isNotEmpty) {
++      fullName.value = argName;
++      email.value = argEmail;
++      return;
++    }
++
++    final token = AdipsLocalStorage.token;
++    if (token == null) return;
++
++    try {
++      final response = await AdipsHttpHelper.get(
++        '/api/v1/users/validate',
++        cookie: 'Authorization=$token',
++      );
++      final user = AdipsHttpHelper.data(response);
++      fullName.value = (user['name'] ?? '').toString();
++      email.value = (user['email'] ?? '').toString();
++    } catch (_) {
++      // Leave name/email blank; the greeting header just shows less.
++    }
++  }
++
++  /// Fetches the transaction list + summary together. Used on first
++  /// load and pull-to-refresh.
++  Future<void> loadAll() async {
++    isLoading.value = true;
++    try {
++      final results = await Future.wait([
++        TransactionApi.list(sortBy: 'transaction_date', order: 'desc'),
++        TransactionApi.summary(),
++      ]);
++      transactions.assignAll(results[0] as List<AppTransaction>);
++      summary.value = results[1] as TransactionSummary;
++    } catch (e) {
++      Get.snackbar(
++        'Could not load data',
++        e.toString().replaceFirst('Exception: ', ''),
++        snackPosition: SnackPosition.BOTTOM,
++      );
++    } finally {
++      isLoading.value = false;
++    }
++  }
++
++  /// Re-fetches quietly (no full-screen spinner) — used after a
++  /// create/update/delete so the balance, summary, and list all stay
++  /// consistent with the database without a jarring loading flash.
++  Future<void> _refreshQuietly() async {
++    try {
++      final results = await Future.wait([
++        TransactionApi.list(sortBy: 'transaction_date', order: 'desc'),
++        TransactionApi.summary(),
++      ]);
++      transactions.assignAll(results[0] as List<AppTransaction>);
++      summary.value = results[1] as TransactionSummary;
++    } catch (e) {
++      Get.snackbar(
++        'Could not refresh',
++        e.toString().replaceFirst('Exception: ', ''),
++        snackPosition: SnackPosition.BOTTOM,
++      );
++    }
++  }
++
++  // ---- Local search / sort / date-range over the fetched list -----
++
++  void setSearchQuery(String value) => searchQuery.value = value;
++
++  void setSortOption(SortOption value) => sortOption.value = value;
++
++  void setDateRange(DateTimeRange? range) => selectedRange.value = range;
++
++  List<AppTransaction> get visibleTransactions {
++    var filtered = transactions.where((t) => t.matchesQuery(searchQuery.value));
++
++    final range = selectedRange.value;
++    if (range != null) {
++      final start = DateTime(range.start.year, range.start.month, range.start.day);
++      final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
++      filtered = filtered.where(
++        (t) => !t.transactionDate.isBefore(start) && !t.transactionDate.isAfter(end),
++      );
++    }
++
++    final list = filtered.toList();
++    list.sort((a, b) {
++      switch (sortOption.value) {
++        case SortOption.newestFirst:
++          return b.transactionDate.compareTo(a.transactionDate);
++        case SortOption.oldestFirst:
++          return a.transactionDate.compareTo(b.transactionDate);
++        case SortOption.amountHighToLow:
++          return b.amount.compareTo(a.amount);
++        case SortOption.amountLowToHigh:
++          return a.amount.compareTo(b.amount);
++      }
++    });
++    return list;
++  }
++
++  // ---- Mutations ----------------------------------------------------
++
++  Future<bool> createTransaction({
++    required double amount,
++    required String type,
++    required String category,
++    required String description,
++    required String status,
++    required String paymentMethod,
++    String note = '',
++    String currency = 'INR',
++  }) async {
++    isMutating.value = true;
++    try {
++      await TransactionApi.create(
++        amount: amount,
++        type: type,
++        category: category,
++        description: description,
++        status: status,
++        paymentMethod: paymentMethod,
++        note: note,
++        currency: currency,
++      );
++      await _refreshQuietly();
++      Get.snackbar('Added', 'Transaction created', snackPosition: SnackPosition.BOTTOM);
++      return true;
++    } catch (e) {
++      Get.snackbar(
++        'Could not add transaction',
++        e.toString().replaceFirst('Exception: ', ''),
++        snackPosition: SnackPosition.BOTTOM,
++      );
++      return false;
++    } finally {
++      isMutating.value = false;
++    }
++  }
++
++  Future<bool> updateTransaction(
++    int id, {
++    double? amount,
++    String? type,
++    String? category,
++    String? description,
++    String? status,
++    String? paymentMethod,
++    String? note,
++    String? currency,
++  }) async {
++    isMutating.value = true;
++    try {
++      await TransactionApi.update(
++        id,
++        amount: amount,
++        type: type,
++        category: category,
++        description: description,
++        status: status,
++        paymentMethod: paymentMethod,
++        note: note,
++        currency: currency,
++      );
++      await _refreshQuietly();
++      Get.snackbar('Saved', 'Transaction updated', snackPosition: SnackPosition.BOTTOM);
++      return true;
++    } catch (e) {
++      Get.snackbar(
++        'Could not save changes',
++        e.toString().replaceFirst('Exception: ', ''),
++        snackPosition: SnackPosition.BOTTOM,
++      );
++      return false;
++    } finally {
++      isMutating.value = false;
++    }
++  }
++
++  Future<bool> deleteTransaction(int id) async {
++    isMutating.value = true;
++    try {
++      await TransactionApi.delete(id);
++      await _refreshQuietly();
++      Get.snackbar('Deleted', 'Transaction removed', snackPosition: SnackPosition.BOTTOM);
++      return true;
++    } catch (e) {
++      Get.snackbar(
++        'Could not delete transaction',
++        e.toString().replaceFirst('Exception: ', ''),
++        snackPosition: SnackPosition.BOTTOM,
++      );
++      return false;
++    } finally {
++      isMutating.value = false;
++    }
++  }
++}
+diff --git a/lib/features/authentication/screens/homepage/home.dart b/lib/features/authentication/screens/homepage/home.dart
+index f51ea4f..a0b46c9 100644
+--- a/lib/features/authentication/screens/homepage/home.dart
++++ b/lib/features/authentication/screens/homepage/home.dart
+@@ -1,17 +1,19 @@
+ import 'package:adips/common/widgets/navigation/bottom_action_bar.dart';
++import 'package:adips/features/authentication/controllers/home/home_controller.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/account_balance.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/date_range_filter.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/greeting_header.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/sort_filter.dart';
++import 'package:adips/features/authentication/screens/homepage/widgets/transaction_form_sheet.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/transaction_list.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/transaction_search_bar.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/transaction_summary.dart';
+ import 'package:flutter/material.dart';
++import 'package:get/get.dart';
+ 
+ import '../../../../utils/constants/adips_palette.dart';
+ import '../../../../utils/constants/sizes.dart';
+ import '../../../../utils/helpers/helper_functions.dart';
+-import '../../../../utils/models/transaction_item.dart';
+ 
+ class HomeScreen extends StatefulWidget {
+   const HomeScreen({super.key});
+@@ -21,56 +23,8 @@ class HomeScreen extends StatefulWidget {
+ }
+ 
+ class _HomeScreenState extends State<HomeScreen> {
+-  static const String name = "Adish";
+-  static const String email = "adish@gmail.com";
+-  static const double accountBalance = 125650.00;
+-
++  final HomeController controller = HomeController.instance;
+   final TextEditingController _searchController = TextEditingController();
+-  String _query = '';
+-  SortOption _sortOption = SortOption.newestFirst;
+-
+-  final List<TransactionItem> _transactions = [
+-    TransactionItem(
+-      id: '1',
+-      title: 'Groceries',
+-      date: DateTime(2026, 7, 17),
+-      amount: 850,
+-      type: TransactionType.expense,
+-      category: TransactionCategory.groceries,
+-    ),
+-    TransactionItem(
+-      id: '2',
+-      title: 'Salary',
+-      date: DateTime(2026, 7, 15),
+-      amount: 30000,
+-      type: TransactionType.income,
+-      category: TransactionCategory.salary,
+-    ),
+-    TransactionItem(
+-      id: '3',
+-      title: 'Uber Ride',
+-      date: DateTime(2026, 7, 13),
+-      amount: 240,
+-      type: TransactionType.expense,
+-      category: TransactionCategory.transport,
+-    ),
+-    TransactionItem(
+-      id: '4',
+-      title: 'Movie Ticket',
+-      date: DateTime(2026, 7, 12),
+-      amount: 450,
+-      type: TransactionType.expense,
+-      category: TransactionCategory.entertainment,
+-    ),
+-    TransactionItem(
+-      id: '5',
+-      title: 'Electricity Bill',
+-      date: DateTime(2026, 7, 10),
+-      amount: 1250,
+-      type: TransactionType.expense,
+-      category: TransactionCategory.utilities,
+-    ),
+-  ];
+ 
+   @override
+   void dispose() {
+@@ -78,33 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
+     super.dispose();
+   }
+ 
+-  double get _totalIncome => _transactions
+-      .where((t) => t.type == TransactionType.income)
+-      .fold(0.0, (sum, t) => sum + t.amount);
+-
+-  double get _totalExpenses => _transactions
+-      .where((t) => t.type == TransactionType.expense)
+-      .fold(0.0, (sum, t) => sum + t.amount);
+-
+-  List<TransactionItem> get _visibleTransactions {
+-    final filtered = _transactions.where((t) => t.matchesQuery(_query)).toList();
+-
+-    filtered.sort((a, b) {
+-      switch (_sortOption) {
+-        case SortOption.newestFirst:
+-          return b.date.compareTo(a.date);
+-        case SortOption.oldestFirst:
+-          return a.date.compareTo(b.date);
+-        case SortOption.amountHighToLow:
+-          return b.amount.compareTo(a.amount);
+-        case SortOption.amountLowToHigh:
+-          return a.amount.compareTo(b.amount);
+-      }
+-    });
+-
+-    return filtered;
+-  }
+-
+   @override
+   Widget build(BuildContext context) {
+     final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+@@ -113,67 +40,82 @@ class _HomeScreenState extends State<HomeScreen> {
+       backgroundColor: isDark ? AdipsPalette.darkBackground : AdipsPalette.lightBackground,
+       body: SafeArea(
+         bottom: false,
+-        child: Padding(
+-          padding: const EdgeInsets.symmetric(horizontal: AdipsSizes.defaultSpace),
+-          child: SingleChildScrollView(
+-            child: Column(
+-              crossAxisAlignment: CrossAxisAlignment.start,
+-              children: [
+-                SizedBox(height: AdipsSizes.spaceBtwSections),
+-                GreetingHeader(name: name, email: email),
+-                SizedBox(height: AdipsSizes.spaceBtwSections),
+-                AccountBalance(accountBalance: accountBalance),
+-                SizedBox(height: AdipsSizes.spaceBtwSections),
+-                Row(
+-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
++        child: RefreshIndicator(
++          onRefresh: controller.loadAll,
++          child: Padding(
++            padding: const EdgeInsets.symmetric(horizontal: AdipsSizes.defaultSpace),
++            child: Obx(() {
++              if (controller.isLoading.value && controller.transactions.isEmpty) {
++                return const Center(
++                  child: Padding(
++                    padding: EdgeInsets.only(top: 120),
++                    child: CircularProgressIndicator(),
++                  ),
++                );
++              }
++
++              return SingleChildScrollView(
++                physics: const AlwaysScrollableScrollPhysics(),
++                child: Column(
++                  crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
+-                    Flexible(
+-                      child: DateRangeFilter(
+-                        onChanged: (selection) {
+-                          debugPrint(
+-                            'Range: ${selection.label} -> ${selection.range.start} to ${selection.range.end}',
+-                          );
+-                          // TODO: trigger your data fetch here
+-                        },
+-                      ),
++                    SizedBox(height: AdipsSizes.spaceBtwSections),
++                    GreetingHeader(
++                      name: controller.fullName.value,
++                      email: controller.email.value,
++                    ),
++                    SizedBox(height: AdipsSizes.spaceBtwSections),
++                    AccountBalance(accountBalance: controller.summary.value.balance),
++                    SizedBox(height: AdipsSizes.spaceBtwSections),
++                    Row(
++                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
++                      children: [
++                        Flexible(
++                          child: DateRangeFilter(
++                            onChanged: (selection) {
++                              controller.setDateRange(selection.range);
++                            },
++                          ),
++                        ),
++                        const SizedBox(width: 12),
++                        Flexible(
++                          child: SortFilter(
++                            onChanged: (sort) => controller.setSortOption(sort),
++                          ),
++                        ),
++                      ],
+                     ),
+-                    const SizedBox(width: 12),
+-                    Flexible(
+-                      child: SortFilter(
+-                        onChanged: (sort) {
+-                          setState(() => _sortOption = sort);
+-                        },
+-                      ),
++                    SizedBox(height: AdipsSizes.spaceBtwSections),
++                    TransactionSummary(
++                      totalIncome: controller.summary.value.totalCredit,
++                      totalExpenses: controller.summary.value.totalDebit,
++                      totalTransactions: controller.summary.value.count,
+                     ),
++                    SizedBox(height: AdipsSizes.spaceBtwItems),
++                    TransactionSearchBar(
++                      controller: _searchController,
++                      onChanged: controller.setSearchQuery,
++                    ),
++                    SizedBox(height: AdipsSizes.spaceBtwItems),
++                    TransactionList(transactions: controller.visibleTransactions),
++                    SizedBox(height: AdipsSizes.spaceBtwSections),
+                   ],
+                 ),
+-                SizedBox(height: AdipsSizes.spaceBtwSections),
+-                TransactionSummary(
+-                  totalIncome: _totalIncome,
+-                  totalExpenses: _totalExpenses,
+-                  totalTransactions: _transactions.length,
+-                ),
+-                SizedBox(height: AdipsSizes.spaceBtwItems),
+-                TransactionSearchBar(
+-                  controller: _searchController,
+-                  onChanged: (value) => setState(() => _query = value),
+-                ),
+-                SizedBox(height: AdipsSizes.spaceBtwItems),
+-                TransactionList(transactions: _visibleTransactions),
+-                SizedBox(height: AdipsSizes.spaceBtwSections),
+-              ],
+-            ),
++              );
++            }),
+           ),
+         ),
+       ),
+       bottomNavigationBar: BottomActionBar(
+-        onAddTap: () {
+-          debugPrint('Add tapped');
+-        },
+-        onSettingsTap: () {
+-          debugPrint('Settings tapped');
+-        },
++        onAddTap: () => showTransactionFormSheet(context),
++        onSettingsTap: () => Get.toNamed(
++          '/settings',
++          arguments: {
++            'fullName': controller.fullName.value,
++            'email': controller.email.value,
++          },
++        ),
+       ),
+     );
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/lib/features/authentication/screens/homepage/widgets/transaction_form_sheet.dart b/lib/features/authentication/screens/homepage/widgets/transaction_form_sheet.dart
+new file mode 100644
+index 0000000..09bc662
+--- /dev/null
++++ b/lib/features/authentication/screens/homepage/widgets/transaction_form_sheet.dart
+@@ -0,0 +1,281 @@
++// widgets/transaction_form_sheet.dart
++import 'package:adips/common/widgets/buttons/custom_elevated_button.dart';
++import 'package:adips/common/widgets/dropdowns/custom_dropdown.dart';
++import 'package:adips/common/widgets/text_fields/custom_text_field.dart';
++import 'package:adips/features/authentication/controllers/home/home_controller.dart';
++import 'package:adips/utils/constants/adips_palette.dart';
++import 'package:adips/utils/constants/sizes.dart';
++import 'package:adips/utils/helpers/helper_functions.dart';
++import 'package:adips/utils/models/app_transaction.dart';
++import 'package:flutter/material.dart';
++import 'package:get/get.dart';
++
++/// Opens the add/edit sheet. Pass an existing [transaction] to edit +
++/// delete it; pass null to create a new one.
++Future<void> showTransactionFormSheet(BuildContext context, {AppTransaction? transaction}) {
++  return showModalBottomSheet(
++    context: context,
++    isScrollControlled: true,
++    backgroundColor: Colors.transparent,
++    builder: (_) => TransactionFormSheet(transaction: transaction),
++  );
++}
++
++class TransactionFormSheet extends StatefulWidget {
++  const TransactionFormSheet({super.key, this.transaction});
++
++  final AppTransaction? transaction;
++
++  bool get isEditing => transaction != null;
++
++  @override
++  State<TransactionFormSheet> createState() => _TransactionFormSheetState();
++}
++
++class _TransactionFormSheetState extends State<TransactionFormSheet> {
++  final _formKey = GlobalKey<FormState>();
++
++  late final TextEditingController _amountController;
++  late final TextEditingController _categoryController;
++  late final TextEditingController _descriptionController;
++  late final TextEditingController _paymentMethodController;
++  late final TextEditingController _noteController;
++  late final TextEditingController _currencyController;
++
++  late String _type; // credit | debit
++  late String _status; // pending | completed | failed
++
++  final HomeController _controller = HomeController.instance;
++
++  @override
++  void initState() {
++    super.initState();
++    final tx = widget.transaction;
++    _amountController = TextEditingController(text: tx != null ? tx.amount.toStringAsFixed(2) : '');
++    _categoryController = TextEditingController(text: tx?.category ?? '');
++    _descriptionController = TextEditingController(text: tx?.description ?? '');
++    _paymentMethodController = TextEditingController(text: tx?.paymentMethod ?? '');
++    _noteController = TextEditingController(text: tx?.note ?? '');
++    _currencyController = TextEditingController(text: tx?.currency ?? 'INR');
++    _type = tx?.type ?? 'debit';
++    _status = tx?.status ?? 'completed';
++  }
++
++  @override
++  void dispose() {
++    _amountController.dispose();
++    _categoryController.dispose();
++    _descriptionController.dispose();
++    _paymentMethodController.dispose();
++    _noteController.dispose();
++    _currencyController.dispose();
++    super.dispose();
++  }
++
++  Future<void> _save() async {
++    if (!_formKey.currentState!.validate()) return;
++    FocusManager.instance.primaryFocus?.unfocus();
++
++    final amount = double.parse(_amountController.text.trim());
++    bool ok;
++
++    if (widget.isEditing) {
++      ok = await _controller.updateTransaction(
++        widget.transaction!.id,
++        amount: amount,
++        type: _type,
++        category: _categoryController.text.trim(),
++        description: _descriptionController.text.trim(),
++        status: _status,
++        paymentMethod: _paymentMethodController.text.trim(),
++        note: _noteController.text.trim(),
++        currency: _currencyController.text.trim().toUpperCase(),
++      );
++    } else {
++      ok = await _controller.createTransaction(
++        amount: amount,
++        type: _type,
++        category: _categoryController.text.trim(),
++        description: _descriptionController.text.trim(),
++        status: _status,
++        paymentMethod: _paymentMethodController.text.trim(),
++        note: _noteController.text.trim(),
++        currency: _currencyController.text.trim().toUpperCase(),
++      );
++    }
++
++    if (ok && mounted) Navigator.of(context).pop();
++  }
++
++  Future<void> _confirmDelete() async {
++    final confirmed = await showDialog<bool>(
++      context: context,
++      builder: (ctx) => AlertDialog(
++        title: const Text('Delete transaction?'),
++        content: const Text('This action cannot be undone.'),
++        actions: [
++          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
++          TextButton(
++            onPressed: () => Navigator.of(ctx).pop(true),
++            child: const Text('Delete', style: TextStyle(color: Colors.red)),
++          ),
++        ],
++      ),
++    );
++
++    if (confirmed != true) return;
++
++    final ok = await _controller.deleteTransaction(widget.transaction!.id);
++    if (ok && mounted) Navigator.of(context).pop();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
++    final surfaceColor = isDark ? AdipsPalette.darkBackground : AdipsPalette.lightBackground;
++    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
++
++    return Padding(
++      // Keeps the sheet above the keyboard.
++      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
++      child: Container(
++        decoration: BoxDecoration(
++          color: surfaceColor,
++          borderRadius: const BorderRadius.vertical(top: Radius.circular(AdipsSizes.cardRadiusLg)),
++        ),
++        padding: const EdgeInsets.fromLTRB(
++          AdipsSizes.defaultSpace,
++          AdipsSizes.sm,
++          AdipsSizes.defaultSpace,
++          AdipsSizes.defaultSpace,
++        ),
++        child: SingleChildScrollView(
++          child: Form(
++            key: _formKey,
++            child: Column(
++              crossAxisAlignment: CrossAxisAlignment.stretch,
++              mainAxisSize: MainAxisSize.min,
++              children: [
++                Center(
++                  child: Container(
++                    width: 40,
++                    height: 4,
++                    margin: const EdgeInsets.only(bottom: AdipsSizes.spaceBtwItems),
++                    decoration: BoxDecoration(
++                      color: textColor.withOpacity(0.2),
++                      borderRadius: BorderRadius.circular(4),
++                    ),
++                  ),
++                ),
++                Text(
++                  widget.isEditing ? 'Edit Transaction' : 'Add Transaction',
++                  style: TextStyle(fontSize: AdipsSizes.fontSizesXxl, fontWeight: FontWeight.bold, color: textColor),
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwSections),
++
++                CustomTextField(
++                  controller: _amountController,
++                  labelText: 'Amount',
++                  hintText: 'e.g. 500',
++                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
++                  prefixIcon: Icons.currency_rupee,
++                  validator: (v) {
++                    if (v == null || v.trim().isEmpty) return 'Amount is required';
++                    final parsed = double.tryParse(v.trim());
++                    if (parsed == null || parsed <= 0) return 'Enter a valid amount';
++                    return null;
++                  },
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                CustomDropdown<String>(
++                  value: _type,
++                  items: const ['credit', 'debit'],
++                  labelText: 'Type',
++                  itemLabelBuilder: (v) => v == 'credit' ? 'Income (credit)' : 'Expense (debit)',
++                  onChanged: (v) => setState(() => _type = v ?? _type),
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                CustomTextField(
++                  controller: _categoryController,
++                  labelText: 'Category',
++                  hintText: 'e.g. Food, Salary, Rent',
++                  prefixIcon: Icons.category_outlined,
++                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Category is required' : null,
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                CustomTextField(
++                  controller: _descriptionController,
++                  labelText: 'Description',
++                  hintText: 'e.g. Groceries for the week',
++                  prefixIcon: Icons.description_outlined,
++                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Description is required' : null,
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                CustomDropdown<String>(
++                  value: _status,
++                  items: const ['pending', 'completed', 'failed'],
++                  labelText: 'Status',
++                  itemLabelBuilder: (v) => v[0].toUpperCase() + v.substring(1),
++                  onChanged: (v) => setState(() => _status = v ?? _status),
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                CustomTextField(
++                  controller: _paymentMethodController,
++                  labelText: 'Payment Method',
++                  hintText: 'e.g. UPI, Card, Cash',
++                  prefixIcon: Icons.payment_outlined,
++                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Payment method is required' : null,
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                CustomTextField(
++                  controller: _currencyController,
++                  labelText: 'Currency',
++                  hintText: 'e.g. INR',
++                  prefixIcon: Icons.language_outlined,
++                  validator: (v) {
++                    if (v == null || v.trim().length != 3) return 'Use a 3-letter code, e.g. INR';
++                    return null;
++                  },
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                CustomTextField(
++                  controller: _noteController,
++                  labelText: 'Note (optional)',
++                  hintText: 'Anything extra you want to remember',
++                  prefixIcon: Icons.notes_outlined,
++                ),
++                const SizedBox(height: AdipsSizes.spaceBtwSections),
++
++                Obx(
++                  () => CustomButton(
++                    text: widget.isEditing ? 'Save Changes' : 'Add Transaction',
++                    isLoading: _controller.isMutating.value,
++                    onPressed: _save,
++                  ),
++                ),
++
++                if (widget.isEditing) ...[
++                  const SizedBox(height: AdipsSizes.spaceBtwItems),
++                  Obx(
++                    () => TextButton.icon(
++                      onPressed: _controller.isMutating.value ? null : _confirmDelete,
++                      icon: const Icon(Icons.delete_outline, color: Colors.red),
++                      label: const Text('Delete Transaction', style: TextStyle(color: Colors.red)),
++                    ),
++                  ),
++                ],
++              ],
++            ),
++          ),
++        ),
++      ),
++    );
++  }
++}
+diff --git a/lib/features/authentication/screens/homepage/widgets/transaction_list.dart b/lib/features/authentication/screens/homepage/widgets/transaction_list.dart
+index ce7649f..98188c5 100644
+--- a/lib/features/authentication/screens/homepage/widgets/transaction_list.dart
++++ b/lib/features/authentication/screens/homepage/widgets/transaction_list.dart
+@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
+ import 'package:intl/intl.dart';
+ 
+ import '../../../../../utils/constants/adips_palette.dart';
++import '../../../../../utils/helpers/category_style.dart';
+ import '../../../../../utils/helpers/helper_functions.dart';
+-import '../../../../../utils/models/transaction_item.dart';
++import '../../../../../utils/models/app_transaction.dart';
++import 'transaction_form_sheet.dart';
+ 
+ class TransactionList extends StatelessWidget {
+   const TransactionList({super.key, required this.transactions});
+ 
+-  final List<TransactionItem> transactions;
++  final List<AppTransaction> transactions;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -42,7 +44,7 @@ class TransactionList extends StatelessWidget {
+ class _TransactionTile extends StatelessWidget {
+   const _TransactionTile({required this.item});
+ 
+-  final TransactionItem item;
++  final AppTransaction item;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -52,52 +54,71 @@ class _TransactionTile extends StatelessWidget {
+     final gainColor = isDark ? AdipsPalette.darkGain : AdipsPalette.lightGain;
+     final lossColor = isDark ? AdipsPalette.darkLoss : AdipsPalette.lightLoss;
+ 
+-    final bool isIncome = item.type == TransactionType.income;
++    final bool isIncome = item.isCredit;
+     final Color amountColor = isIncome ? gainColor : lossColor;
+     final String sign = isIncome ? '+' : '-';
++    final Color categoryColor = CategoryStyle.colorFor(item.category);
+ 
+-    return Padding(
+-      padding: const EdgeInsets.symmetric(vertical: 12),
+-      child: Row(
+-        crossAxisAlignment: CrossAxisAlignment.center,
+-        children: [
+-          Container(
+-            width: 44,
+-            height: 44,
+-            alignment: Alignment.center,
+-            decoration: BoxDecoration(
+-              color: item.category.color.withOpacity(0.12),
+-              shape: BoxShape.circle,
++    return InkWell(
++      onTap: () => showTransactionFormSheet(context, transaction: item),
++      child: Padding(
++        padding: const EdgeInsets.symmetric(vertical: 12),
++        child: Row(
++          crossAxisAlignment: CrossAxisAlignment.center,
++          children: [
++            Container(
++              width: 44,
++              height: 44,
++              alignment: Alignment.center,
++              decoration: BoxDecoration(
++                color: categoryColor.withOpacity(0.12),
++                shape: BoxShape.circle,
++              ),
++              child: Icon(CategoryStyle.iconFor(item.category), size: 20, color: categoryColor),
+             ),
+-            child: Icon(item.category.icon, size: 20, color: item.category.color),
+-          ),
+-          const SizedBox(width: 12),
+-          Expanded(
+-            child: Column(
+-              crossAxisAlignment: CrossAxisAlignment.start,
++            const SizedBox(width: 12),
++            Expanded(
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.start,
++                mainAxisSize: MainAxisSize.min,
++                children: [
++                  Text(
++                    item.description,
++                    maxLines: 1,
++                    overflow: TextOverflow.ellipsis,
++                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor),
++                  ),
++                  const SizedBox(height: 2),
++                  Text(
++                    '${DateFormat('d MMM yyyy').format(item.transactionDate)} · ${item.category}',
++                    maxLines: 1,
++                    overflow: TextOverflow.ellipsis,
++                    style: TextStyle(fontSize: 12, color: mutedColor),
++                  ),
++                ],
++              ),
++            ),
++            const SizedBox(width: 8),
++            Column(
++              crossAxisAlignment: CrossAxisAlignment.end,
+               mainAxisSize: MainAxisSize.min,
+               children: [
+                 Text(
+-                  item.title,
+-                  maxLines: 1,
+-                  overflow: TextOverflow.ellipsis,
+-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor),
+-                ),
+-                const SizedBox(height: 2),
+-                Text(
+-                  DateFormat('d MMM yyyy').format(item.date),
+-                  style: TextStyle(fontSize: 12, color: mutedColor),
++                  '$sign ₹${item.amount.toStringAsFixed(2)}',
++                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: amountColor),
+                 ),
++                if (item.status != 'completed') ...[
++                  const SizedBox(height: 2),
++                  Text(
++                    item.status,
++                    style: TextStyle(fontSize: 10, color: mutedColor),
++                  ),
++                ],
+               ],
+             ),
+-          ),
+-          const SizedBox(width: 8),
+-          Text(
+-            '$sign ₹${AdipsFormatters.formatCurrency(item.amount)}',
+-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: amountColor),
+-          ),
+-        ],
++          ],
++        ),
+       ),
+     );
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/lib/features/settings/screens/settings_screen.dart b/lib/features/settings/screens/settings_screen.dart
+new file mode 100644
+index 0000000..6c626cd
+--- /dev/null
++++ b/lib/features/settings/screens/settings_screen.dart
+@@ -0,0 +1,124 @@
++import 'package:adips/utils/constants/adips_palette.dart';
++import 'package:adips/utils/constants/sizes.dart';
++import 'package:adips/utils/helpers/helper_functions.dart';
++import 'package:flutter/material.dart';
++import 'package:get/get.dart';
++
++/// Settings screen, reached from the home screen's bottom action bar.
++/// Tapping "Account" opens the Dashboard screen (profile details +
++/// logout).
++class SettingsScreen extends StatelessWidget {
++  const SettingsScreen({super.key});
++
++  @override
++  Widget build(BuildContext context) {
++    final Map<String, dynamic> args = (Get.arguments as Map<String, dynamic>?) ?? {};
++
++    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
++    final backgroundColor = isDark ? AdipsPalette.darkBackground : AdipsPalette.lightBackground;
++    final surfaceColor = isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField;
++    final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
++    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
++    final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
++    final brandColor = isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
++
++    return Scaffold(
++      backgroundColor: backgroundColor,
++      appBar: AppBar(
++        title: const Text('Settings'),
++        backgroundColor: backgroundColor,
++        foregroundColor: textColor,
++        elevation: 0,
++      ),
++      body: SafeArea(
++        child: ListView(
++          padding: const EdgeInsets.all(AdipsSizes.defaultSpace),
++          children: [
++            Text(
++              'GENERAL',
++              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mutedColor, letterSpacing: 1),
++            ),
++            const SizedBox(height: AdipsSizes.spaceBtwItems),
++            Container(
++              decoration: BoxDecoration(
++                color: surfaceColor,
++                border: Border.all(color: lineColor),
++                borderRadius: BorderRadius.circular(AdipsSizes.cardRadiusMg),
++              ),
++              child: Column(
++                children: [
++                  _SettingsTile(
++                    icon: Icons.person_outline_rounded,
++                    label: 'Account',
++                    subtitle: 'Profile details, logout',
++                    iconColor: brandColor,
++                    textColor: textColor,
++                    mutedColor: mutedColor,
++                    onTap: () => Get.toNamed('/dashboard', arguments: args),
++                  ),
++                  Divider(height: 1, color: lineColor),
++                  _SettingsTile(
++                    icon: Icons.dark_mode_outlined,
++                    label: 'Appearance',
++                    subtitle: 'Follows your system theme',
++                    iconColor: brandColor,
++                    textColor: textColor,
++                    mutedColor: mutedColor,
++                    onTap: () {},
++                  ),
++                  Divider(height: 1, color: lineColor),
++                  _SettingsTile(
++                    icon: Icons.currency_rupee_rounded,
++                    label: 'Currency',
++                    subtitle: 'Default transaction currency',
++                    iconColor: brandColor,
++                    textColor: textColor,
++                    mutedColor: mutedColor,
++                    onTap: () {},
++                  ),
++                ],
++              ),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++}
++
++class _SettingsTile extends StatelessWidget {
++  const _SettingsTile({
++    required this.icon,
++    required this.label,
++    required this.subtitle,
++    required this.iconColor,
++    required this.textColor,
++    required this.mutedColor,
++    required this.onTap,
++  });
++
++  final IconData icon;
++  final String label;
++  final String subtitle;
++  final Color iconColor;
++  final Color textColor;
++  final Color mutedColor;
++  final VoidCallback onTap;
++
++  @override
++  Widget build(BuildContext context) {
++    return ListTile(
++      onTap: onTap,
++      leading: Container(
++        width: 40,
++        height: 40,
++        alignment: Alignment.center,
++        decoration: BoxDecoration(color: iconColor.withOpacity(0.12), shape: BoxShape.circle),
++        child: Icon(icon, size: 20, color: iconColor),
++      ),
++      title: Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
++      subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: mutedColor)),
++      trailing: Icon(Icons.chevron_right_rounded, color: mutedColor),
++    );
++  }
++}
+diff --git a/lib/screens/Dashboard.dart b/lib/screens/Dashboard.dart
+index 282209e..2409ece 100644
+--- a/lib/screens/Dashboard.dart
++++ b/lib/screens/Dashboard.dart
+@@ -1,31 +1,114 @@
++import 'package:adips/common/widgets/buttons/custom_elevated_button.dart';
++import 'package:adips/utils/constants/adips_palette.dart';
++import 'package:adips/utils/constants/sizes.dart';
++import 'package:adips/utils/helpers/helper_functions.dart';
++import 'package:adips/utils/http/http_client.dart';
++import 'package:adips/utils/local_storage/storage_utility.dart';
+ import 'package:flutter/material.dart';
++import 'package:get/get.dart';
+ 
+-class Dashboard extends StatelessWidget {
++/// Account / profile screen — reached from Settings > Account.
++/// Shows the logged-in user's details and lets them log out (clears
++/// the saved token locally and tells the backend to drop the auth
++/// cookie), which is the "logout and all" functionality this screen
++/// owns.
++class Dashboard extends StatefulWidget {
+   const Dashboard({super.key});
+ 
++  @override
++  State<Dashboard> createState() => _DashboardState();
++}
++
++class _DashboardState extends State<Dashboard> {
++  bool _isLoggingOut = false;
++
++  Future<void> _logout() async {
++    setState(() => _isLoggingOut = true);
++    final token = AdipsLocalStorage.token;
++    try {
++      await AdipsHttpHelper.post(
++        '/api/v1/users/logout',
++        {},
++        cookie: token != null ? 'Authorization=$token' : null,
++      );
++    } catch (_) {
++      // Even if the network call fails, still clear locally and send
++      // the user back to Login — a failed logout call shouldn't trap
++      // them in the app.
++    }
++    await AdipsLocalStorage.clearToken();
++    Get.offAllNamed('/login');
++  }
++
+   @override
+   Widget build(BuildContext context) {
++    final Map<String, dynamic> args = (Get.arguments as Map<String, dynamic>?) ?? {};
++    final String fullName = (args['fullName'] as String?)?.trim().isNotEmpty == true
++        ? args['fullName'] as String
++        : 'Not provided';
++    final String email = (args['email'] as String?)?.trim().isNotEmpty == true
++        ? args['email'] as String
++        : 'Not provided';
++
++    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
++    final backgroundColor = isDark ? AdipsPalette.darkBackground : AdipsPalette.lightBackground;
++    final surfaceColor = isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField;
++    final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
++    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
++    final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
++    final brandColor = isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
++
+     return Scaffold(
++      backgroundColor: backgroundColor,
+       appBar: AppBar(
+-          title: Text("Dashboard".toUpperCase(),
+-          style: TextStyle(
+-            color: Colors.white,
+-            fontWeight: FontWeight.bold
+-          ),),
+-          backgroundColor: Colors.blue
++        title: const Text('Account'),
++        backgroundColor: backgroundColor,
++        foregroundColor: textColor,
++        elevation: 0,
+       ),
+-      body: Center(
+-        child: Text.rich(
+-          TextSpan(
+-            text: 'Hello',
++      body: SafeArea(
++        child: Padding(
++          padding: const EdgeInsets.all(AdipsSizes.defaultSpace),
++          child: Column(
++            crossAxisAlignment: CrossAxisAlignment.stretch,
+             children: [
+-              TextSpan(
+-                text: 'Welcome',
+-                style: TextStyle(fontSize: 40.0, fontWeight: FontWeight.bold),
++              const SizedBox(height: AdipsSizes.spaceBtwItems),
++              CircleAvatar(
++                radius: 40,
++                backgroundColor: brandColor,
++                child: const Icon(Icons.person, size: 40, color: Colors.white),
++              ),
++              const SizedBox(height: AdipsSizes.spaceBtwSections),
++              Text(
++                fullName,
++                textAlign: TextAlign.center,
++                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
++              ),
++              const SizedBox(height: AdipsSizes.spaceBtwSections),
++
++              // Details card
++              Container(
++                padding: const EdgeInsets.all(AdipsSizes.md),
++                decoration: BoxDecoration(
++                  color: surfaceColor,
++                  border: Border.all(color: lineColor),
++                  borderRadius: BorderRadius.circular(AdipsSizes.cardRadiusMg),
++                ),
++                child: Column(
++                  crossAxisAlignment: CrossAxisAlignment.start,
++                  children: [
++                    _DetailRow(label: 'Full Name', value: fullName, textColor: textColor, mutedColor: mutedColor),
++                    Divider(height: AdipsSizes.spaceBtwItems, color: lineColor),
++                    _DetailRow(label: 'Email', value: email, textColor: textColor, mutedColor: mutedColor),
++                  ],
++                ),
+               ),
+-              TextSpan(
+-                text: 'Adipsians',
+-                style: TextStyle(fontSize: 20.0, color: Colors.blue),
++              const SizedBox(height: AdipsSizes.spaceBtwSections),
++
++              CustomButton(
++                text: 'Logout',
++                isLoading: _isLoggingOut,
++                onPressed: _logout,
+               ),
+             ],
+           ),
+@@ -34,3 +117,34 @@ class Dashboard extends StatelessWidget {
+     );
+   }
+ }
++
++class _DetailRow extends StatelessWidget {
++  const _DetailRow({
++    required this.label,
++    required this.value,
++    required this.textColor,
++    required this.mutedColor,
++  });
++
++  final String label;
++  final String value;
++  final Color textColor;
++  final Color mutedColor;
++
++  @override
++  Widget build(BuildContext context) {
++    return Row(
++      mainAxisAlignment: MainAxisAlignment.spaceBetween,
++      children: [
++        Text(label, style: TextStyle(color: mutedColor)),
++        Flexible(
++          child: Text(
++            value,
++            textAlign: TextAlign.right,
++            style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
++          ),
++        ),
++      ],
++    );
++  }
++}
+diff --git a/lib/utils/helpers/category_style.dart b/lib/utils/helpers/category_style.dart
+new file mode 100644
+index 0000000..0a8cbb7
+--- /dev/null
++++ b/lib/utils/helpers/category_style.dart
+@@ -0,0 +1,87 @@
++// utils/helpers/category_style.dart
++import 'package:flutter/material.dart';
++
++/// Transaction categories come from the backend as free-text strings
++/// (see internal/models/transaction.go — Category is just a `string`,
++/// not a foreign key), including whatever a user names their own
++/// custom category. This maps the well-known seeded category names
++/// (see internal/service/seed.go) to a nice icon/color, and falls
++/// back to a generic look for anything else so the UI never breaks
++/// on a category it doesn't recognise.
++class CategoryStyle {
++  static IconData iconFor(String category) {
++    switch (category.trim().toLowerCase()) {
++      case 'food':
++        return Icons.restaurant_outlined;
++      case 'grocery':
++      case 'groceries':
++        return Icons.shopping_cart_outlined;
++      case 'fuel':
++        return Icons.local_gas_station_outlined;
++      case 'shopping':
++        return Icons.shopping_bag_outlined;
++      case 'bills & utilities':
++      case 'utilities':
++        return Icons.bolt_outlined;
++      case 'entertainment':
++        return Icons.movie_filter_outlined;
++      case 'health':
++        return Icons.favorite_border_rounded;
++      case 'rent':
++        return Icons.home_outlined;
++      case 'salary':
++        return Icons.work_outline_rounded;
++      case 'business':
++        return Icons.business_center_outlined;
++      case 'investment':
++        return Icons.trending_up_rounded;
++      case 'gift':
++        return Icons.card_giftcard_outlined;
++      case 'wallet transfer':
++      case 'transfer':
++        return Icons.swap_horiz_rounded;
++      case 'transport':
++        return Icons.local_taxi_outlined;
++      default:
++        return Icons.receipt_long_outlined;
++    }
++  }
++
++  static Color colorFor(String category) {
++    switch (category.trim().toLowerCase()) {
++      case 'food':
++        return const Color(0xFFE0A526);
++      case 'grocery':
++      case 'groceries':
++        return const Color(0xFF2E9E5B);
++      case 'fuel':
++        return const Color(0xFFE07A26);
++      case 'shopping':
++        return const Color(0xFFE0526B);
++      case 'bills & utilities':
++      case 'utilities':
++        return const Color(0xFF2F9BE0);
++      case 'entertainment':
++        return const Color(0xFF8B5CF6);
++      case 'health':
++        return const Color(0xFFE0526B);
++      case 'rent':
++        return const Color(0xFF6B7A8D);
++      case 'salary':
++        return const Color(0xFF0F9D58);
++      case 'business':
++        return const Color(0xFF0F9D58);
++      case 'investment':
++        return const Color(0xFF2F9BE0);
++      case 'gift':
++        return const Color(0xFF8B5CF6);
++      case 'wallet transfer':
++      case 'transfer':
++        return const Color(0xFF6B7A8D);
++      case 'transport':
++        return const Color(0xFFE0A526);
++      default:
++        return const Color(0xFF6B7A8D);
++    }
++  }
++}
+diff --git a/lib/utils/http/http_client.dart b/lib/utils/http/http_client.dart
+index 5cd6ea2..07bbff9 100644
+--- a/lib/utils/http/http_client.dart
++++ b/lib/utils/http/http_client.dart
+@@ -59,6 +59,37 @@ class AdipsHttpHelper {
+     }
+   }
+ 
++  static Future<Map<String, dynamic>> patch(
++      String endpoint,
++      Map<String, dynamic> body, {
++        String? cookie,
++      }) async {
++    final url = Uri.parse('$_baseUrl$endpoint');
++    try {
++      final response = await http
++          .patch(url, headers: _headers(cookie: cookie), body: jsonEncode(body))
++          .timeout(const Duration(seconds: 15));
++      return _handleResponse(response);
++    } on http.ClientException {
++      throw Exception('Could not reach the server. Check your connection.');
++    }
++  }
++
++  static Future<Map<String, dynamic>> delete(
++      String endpoint, {
++        String? cookie,
++      }) async {
++    final url = Uri.parse('$_baseUrl$endpoint');
++    try {
++      final response = await http
++          .delete(url, headers: _headers(cookie: cookie))
++          .timeout(const Duration(seconds: 15));
++      return _handleResponse(response);
++    } on http.ClientException {
++      throw Exception('Could not reach the server. Check your connection.');
++    }
++  }
++
+   /// Unwraps the `data` field from a decoded response envelope.
+   /// Every 2xx response from the backend is shaped like
+   /// `{"success":true,"message":"...","data": <payload>}` — call
+@@ -68,6 +99,18 @@ class AdipsHttpHelper {
+     return response['data'] as Map<String, dynamic>? ?? {};
+   }
+ 
++  /// Same as [data] but for endpoints whose `data` field is a JSON
++  /// array (e.g. GET /transactions) rather than an object.
++  static List<dynamic> listData(Map<String, dynamic> response) {
++    return response['data'] as List<dynamic>? ?? [];
++  }
++
++  /// Unwraps the `meta` field (pagination info) from a decoded
++  /// response envelope.
++  static Map<String, dynamic> meta(Map<String, dynamic> response) {
++    return response['meta'] as Map<String, dynamic>? ?? {};
++  }
++
+   /// Parses the response and throws a readable Exception on any
+   /// non-2xx status, so callers can just try/catch a single Exception type.
+   static Map<String, dynamic> _handleResponse(http.Response response) {
+diff --git a/lib/utils/models/app_transaction.dart b/lib/utils/models/app_transaction.dart
+new file mode 100644
+index 0000000..76ca14f
+--- /dev/null
++++ b/lib/utils/models/app_transaction.dart
+@@ -0,0 +1,117 @@
++// utils/models/app_transaction.dart
++//
++// Mirrors internal/dto.TransactionResponse from adips_backend exactly
++// (field names/types), so parsing is a straight json['field'] read
++// with no guessing at what the server sends.
++class AppTransaction {
++  const AppTransaction({
++    required this.id,
++    required this.userId,
++    required this.amount,
++    required this.type,
++    required this.category,
++    required this.description,
++    required this.status,
++    required this.paymentMethod,
++    required this.transactionDate,
++    required this.note,
++    required this.currency,
++    required this.createdAt,
++    required this.updatedAt,
++  });
++
++  final int id;
++  final int userId;
++  final double amount;
++
++  /// Always "credit" or "debit" — matches the backend's
++  /// TransactionDirection enum.
++  final String type;
++  final String category;
++  final String description;
++
++  /// "pending" | "completed" | "failed"
++  final String status;
++  final String paymentMethod;
++  final DateTime transactionDate;
++  final String note;
++  final String currency;
++  final DateTime createdAt;
++  final DateTime updatedAt;
++
++  bool get isCredit => type == 'credit';
++
++  factory AppTransaction.fromJson(Map<String, dynamic> json) {
++    return AppTransaction(
++      id: _asInt(json['id']),
++      userId: _asInt(json['user_id']),
++      amount: _asDouble(json['amount']),
++      type: (json['type'] ?? 'debit').toString(),
++      category: (json['category'] ?? '').toString(),
++      description: (json['description'] ?? '').toString(),
++      status: (json['status'] ?? 'completed').toString(),
++      paymentMethod: (json['payment_method'] ?? '').toString(),
++      transactionDate: _asDate(json['transaction_date']),
++      note: (json['note'] ?? '').toString(),
++      currency: (json['currency'] ?? 'INR').toString(),
++      createdAt: _asDate(json['created_at']),
++      updatedAt: _asDate(json['updated_at']),
++    );
++  }
++
++  /// Simple case-insensitive match over description/category, used
++  /// by the search bar.
++  bool matchesQuery(String query) {
++    final trimmed = query.trim().toLowerCase();
++    if (trimmed.isEmpty) return true;
++    return description.toLowerCase().contains(trimmed) ||
++        category.toLowerCase().contains(trimmed);
++  }
++
++  static int _asInt(dynamic v) {
++    if (v is int) return v;
++    if (v is num) return v.toInt();
++    return int.tryParse(v?.toString() ?? '') ?? 0;
++  }
++
++  static double _asDouble(dynamic v) {
++    if (v is num) return v.toDouble();
++    return double.tryParse(v?.toString() ?? '') ?? 0.0;
++  }
++
++  static DateTime _asDate(dynamic v) {
++    if (v == null) return DateTime.now();
++    return DateTime.tryParse(v.toString())?.toLocal() ?? DateTime.now();
++  }
++}
++
++/// Mirrors internal/dto.SummaryResponse.
++class TransactionSummary {
++  const TransactionSummary({
++    required this.totalCredit,
++    required this.totalDebit,
++    required this.balance,
++    required this.count,
++  });
++
++  final double totalCredit;
++  final double totalDebit;
++  final double balance;
++  final int count;
++
++  factory TransactionSummary.fromJson(Map<String, dynamic> json) {
++    return TransactionSummary(
++      totalCredit: AppTransaction._asDouble(json['total_credit']),
++      totalDebit: AppTransaction._asDouble(json['total_debit']),
++      balance: AppTransaction._asDouble(json['balance']),
++      count: AppTransaction._asInt(json['transaction_count']),
++    );
++  }
++
++  static const empty = TransactionSummary(
++    totalCredit: 0,
++    totalDebit: 0,
++    balance: 0,
++    count: 0,
++  );
++}
+diff --git a/lib/utils/models/transaction_item.dart b/lib/utils/models/transaction_item.dart
+deleted file mode 100644
+index 7970391..0000000
+--- a/lib/utils/models/transaction_item.dart
++++ /dev/null
+@@ -1,79 +0,0 @@
+-// utils/models/transaction_item.dart
+-import 'package:flutter/material.dart';
+-
+-enum TransactionType { income, expense }
+-
+-enum TransactionCategory {
+-  groceries,
+-  salary,
+-  transport,
+-  entertainment,
+-  utilities,
+-  shopping,
+-  other,
+-}
+-
+-extension TransactionCategoryStyle on TransactionCategory {
+-  IconData get icon {
+-    switch (this) {
+-      case TransactionCategory.groceries:
+-        return Icons.shopping_cart_outlined;
+-      case TransactionCategory.salary:
+-        return Icons.work_outline_rounded;
+-      case TransactionCategory.transport:
+-        return Icons.local_taxi_outlined;
+-      case TransactionCategory.entertainment:
+-        return Icons.movie_filter_outlined;
+-      case TransactionCategory.utilities:
+-        return Icons.bolt_outlined;
+-      case TransactionCategory.shopping:
+-        return Icons.shopping_bag_outlined;
+-      case TransactionCategory.other:
+-        return Icons.receipt_long_outlined;
+-    }
+-  }
+-
+-  Color get color {
+-    switch (this) {
+-      case TransactionCategory.groceries:
+-        return const Color(0xFF2E9E5B);
+-      case TransactionCategory.salary:
+-        return const Color(0xFF0F9D58);
+-      case TransactionCategory.transport:
+-        return const Color(0xFFE0A526);
+-      case TransactionCategory.entertainment:
+-        return const Color(0xFF8B5CF6);
+-      case TransactionCategory.utilities:
+-        return const Color(0xFF2F9BE0);
+-      case TransactionCategory.shopping:
+-        return const Color(0xFFE0526B);
+-      case TransactionCategory.other:
+-        return const Color(0xFF6B7A8D);
+-    }
+-  }
+-}
+-
+-class TransactionItem {
+-  const TransactionItem({
+-    required this.id,
+-    required this.title,
+-    required this.date,
+-    required this.amount,
+-    required this.type,
+-    required this.category,
+-  });
+-
+-  final String id;
+-  final String title;
+-  final DateTime date;
+-  final double amount;
+-  final TransactionType type;
+-  final TransactionCategory category;
+-
+-  /// Simple case-insensitive title match used by the search bar.
+-  bool matchesQuery(String query) {
+-    final trimmed = query.trim().toLowerCase();
+-    if (trimmed.isEmpty) return true;
+-    return title.toLowerCase().contains(trimmed);
+-  }
+-}
+\ No newline at end of file
+diff --git a/lib/utils/services/transaction_api.dart b/lib/utils/services/transaction_api.dart
+new file mode 100644
+index 0000000..e924d54
+--- /dev/null
++++ b/lib/utils/services/transaction_api.dart
+@@ -0,0 +1,124 @@
++// utils/services/transaction_api.dart
++import 'package:adips/utils/http/http_client.dart';
++import 'package:adips/utils/local_storage/storage_utility.dart';
++import 'package:adips/utils/models/app_transaction.dart';
++
++/// Thin repository around AdipsHttpHelper for everything under
++/// /api/v1/transactions. Every call automatically attaches the saved
++/// auth token as the `Authorization` cookie the backend middleware
++/// expects (see internal/middleware/auth.go) — callers never need to
++/// touch AdipsLocalStorage themselves.
++class TransactionApi {
++  static String? get _cookie {
++    final token = AdipsLocalStorage.token;
++    return token != null ? 'Authorization=$token' : null;
++  }
++
++  /// GET /api/v1/transactions
++  /// A generous [limit] is used by default so the home screen can do
++  /// its own client-side search/sort/date-range filtering over
++  /// "recent" transactions without paging through the API for a
++  /// typical personal-finance-sized dataset.
++  static Future<List<AppTransaction>> list({
++    int page = 1,
++    int limit = 200,
++    String? sortBy,
++    String? order,
++  }) async {
++    final query = <String, String>{
++      'page': '$page',
++      'limit': '$limit',
++      if (sortBy != null) 'sort_by': sortBy,
++      if (order != null) 'order': order,
++    };
++    final uri = Uri(path: '/api/v1/transactions', queryParameters: query);
++
++    final response = await AdipsHttpHelper.get(
++      uri.toString(),
++      cookie: _cookie,
++    );
++
++    return AdipsHttpHelper.listData(response)
++        .map((e) => AppTransaction.fromJson(e as Map<String, dynamic>))
++        .toList();
++  }
++
++  /// GET /api/v1/transactions/summary
++  static Future<TransactionSummary> summary() async {
++    final response = await AdipsHttpHelper.get(
++      '/api/v1/transactions/summary',
++      cookie: _cookie,
++    );
++    return TransactionSummary.fromJson(AdipsHttpHelper.data(response));
++  }
++
++  /// POST /api/v1/transactions
++  static Future<AppTransaction> create({
++    required double amount,
++    required String type,
++    required String category,
++    required String description,
++    required String status,
++    required String paymentMethod,
++    String note = '',
++    String currency = 'INR',
++  }) async {
++    final response = await AdipsHttpHelper.post(
++      '/api/v1/transactions',
++      {
++        'amount': amount,
++        'type': type,
++        'category': category,
++        'description': description,
++        'status': status,
++        'payment_method': paymentMethod,
++        'note': note,
++        'currency': currency,
++      },
++      cookie: _cookie,
++    );
++    return AppTransaction.fromJson(AdipsHttpHelper.data(response));
++  }
++
++  /// PATCH /api/v1/transactions/:id
++  /// Only non-null fields are sent, matching the backend's partial
++  /// UpdateTransactionRequest (pointer fields — omitted keys are left
++  /// untouched server-side).
++  static Future<AppTransaction> update(
++    int id, {
++    double? amount,
++    String? type,
++    String? category,
++    String? description,
++    String? status,
++    String? paymentMethod,
++    String? note,
++    String? currency,
++  }) async {
++    final body = <String, dynamic>{
++      if (amount != null) 'amount': amount,
++      if (type != null) 'type': type,
++      if (category != null) 'category': category,
++      if (description != null) 'description': description,
++      if (status != null) 'status': status,
++      if (paymentMethod != null) 'payment_method': paymentMethod,
++      if (note != null) 'note': note,
++      if (currency != null) 'currency': currency,
++    };
++
++    final response = await AdipsHttpHelper.patch(
++      '/api/v1/transactions/$id',
++      body,
++      cookie: _cookie,
++    );
++    return AppTransaction.fromJson(AdipsHttpHelper.data(response));
++  }
++
++  /// DELETE /api/v1/transactions/:id
++  static Future<void> delete(int id) async {
++    await AdipsHttpHelper.delete(
++      '/api/v1/transactions/$id',
++      cookie: _cookie,
++    );
++  }
++}

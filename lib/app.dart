@@ -1,8 +1,11 @@
+import 'package:adips/features/authentication/controllers/home/home_binding.dart';
 import 'package:adips/features/authentication/controllers/login/login_binding.dart';
 import 'package:adips/features/authentication/controllers/register/register_binding.dart';
 import 'package:adips/features/authentication/screens/login/login.dart';
 import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
 import 'package:adips/features/authentication/screens/register/register.dart';
+import 'package:adips/features/settings/screens/settings_screen.dart';
+import 'package:adips/screens/Dashboard.dart';
 import 'package:adips/utils/startup/start_destination.dart';
 import 'package:adips/utils/theme/adips_app_theme.dart';
 import 'package:flutter/material.dart';
@@ -39,7 +42,13 @@ class App extends StatelessWidget {
           page: () => const RegisterScreen(),
           binding: RegisterBinding(),
         ),
-        GetPage(name: '/home', page: () => const HomeScreen()),
+        GetPage(
+          name: '/home',
+          page: () => const HomeScreen(),
+          binding: HomeBinding(),
+        ),
+        GetPage(name: '/settings', page: () => const SettingsScreen()),
+        GetPage(name: '/dashboard', page: () => const Dashboard()),
       ],
     );
   }
