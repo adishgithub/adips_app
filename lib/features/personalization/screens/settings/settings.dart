@@ -1,5 +1,6 @@
 // features/personalization/screens/settings/settings.dart
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../../../../common/widgets/list_tiles/settings_tile.dart';
 import '../../../../data/services/settings_service.dart';
@@ -84,6 +85,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               ProfileSection(name: widget.name, email: widget.email),
               const SizedBox(height: AdipsSizes.spaceBtwSections),
+
+              SettingsSectionCard(
+                label: 'General',
+                children: [
+                  SettingsTile(
+                    icon: Icons.person_outline_rounded,
+                    title: 'Account',
+                    subtitle: 'Profile details, logout',
+                    onTap: () => Get.toNamed(
+                      '/dashboard',
+                      arguments: {'fullName': widget.name, 'email': widget.email},
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AdipsSizes.spaceBtwItems),
 
               SettingsSectionCard(
                 label: 'Preferences',

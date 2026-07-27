@@ -4,7 +4,7 @@ import 'package:adips/features/authentication/controllers/register/register_bind
 import 'package:adips/features/authentication/screens/login/login.dart';
 import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
 import 'package:adips/features/authentication/screens/register/register.dart';
-import 'package:adips/features/settings/screens/settings_screen.dart';
+import 'package:adips/features/personalization/screens/settings/settings.dart';
 import 'package:adips/screens/Dashboard.dart';
 import 'package:adips/utils/startup/start_destination.dart';
 import 'package:adips/utils/theme/adips_app_theme.dart';
@@ -47,7 +47,16 @@ class App extends StatelessWidget {
           page: () => const HomeScreen(),
           binding: HomeBinding(),
         ),
-        GetPage(name: '/settings', page: () => const SettingsScreen()),
+        GetPage(
+          name: '/settings',
+          page: () {
+            final args = (Get.arguments as Map<String, dynamic>?) ?? {};
+            return SettingsScreen(
+              name: (args['fullName'] ?? '').toString(),
+              email: (args['email'] ?? '').toString(),
+            );
+          },
+        ),
         GetPage(name: '/dashboard', page: () => const Dashboard()),
       ],
     );

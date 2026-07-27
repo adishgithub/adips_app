@@ -1,0 +1,195 @@
+diff --git a/lib/app.dart b/lib/app.dart
+index 0eff6c6..762cfad 100644
+--- a/lib/app.dart
++++ b/lib/app.dart
+@@ -4,7 +4,7 @@ import 'package:adips/features/authentication/controllers/register/register_bind
+ import 'package:adips/features/authentication/screens/login/login.dart';
+ import 'package:adips/features/authentication/screens/onboarding/onboarding.dart';
+ import 'package:adips/features/authentication/screens/register/register.dart';
+-import 'package:adips/features/settings/screens/settings_screen.dart';
++import 'package:adips/features/personalization/screens/settings/settings.dart';
+ import 'package:adips/screens/Dashboard.dart';
+ import 'package:adips/utils/startup/start_destination.dart';
+ import 'package:adips/utils/theme/adips_app_theme.dart';
+@@ -47,7 +47,16 @@ class App extends StatelessWidget {
+           page: () => const HomeScreen(),
+           binding: HomeBinding(),
+         ),
+-        GetPage(name: '/settings', page: () => const SettingsScreen()),
++        GetPage(
++          name: '/settings',
++          page: () {
++            final args = (Get.arguments as Map<String, dynamic>?) ?? {};
++            return SettingsScreen(
++              name: (args['fullName'] ?? '').toString(),
++              email: (args['email'] ?? '').toString(),
++            );
++          },
++        ),
+         GetPage(name: '/dashboard', page: () => const Dashboard()),
+       ],
+     );
+diff --git a/lib/features/personalization/screens/settings/settings.dart b/lib/features/personalization/screens/settings/settings.dart
+index 0b3ef88..66ee65b 100644
+--- a/lib/features/personalization/screens/settings/settings.dart
++++ b/lib/features/personalization/screens/settings/settings.dart
+@@ -1,5 +1,6 @@
+ // features/personalization/screens/settings/settings.dart
+ import 'package:flutter/material.dart';
++import 'package:get/get.dart';
+ 
+ import '../../../../common/widgets/list_tiles/settings_tile.dart';
+ import '../../../../data/services/settings_service.dart';
+@@ -85,6 +86,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
+               ProfileSection(name: widget.name, email: widget.email),
+               const SizedBox(height: AdipsSizes.spaceBtwSections),
+ 
++              SettingsSectionCard(
++                label: 'General',
++                children: [
++                  SettingsTile(
++                    icon: Icons.person_outline_rounded,
++                    title: 'Account',
++                    subtitle: 'Profile details, logout',
++                    onTap: () => Get.toNamed(
++                      '/dashboard',
++                      arguments: {'fullName': widget.name, 'email': widget.email},
++                    ),
++                  ),
++                ],
++              ),
++              const SizedBox(height: AdipsSizes.spaceBtwItems),
++
+               SettingsSectionCard(
+                 label: 'Preferences',
+                 children: [
+diff --git a/lib/features/settings/screens/settings_screen.dart b/lib/features/settings/screens/settings_screen.dart
+deleted file mode 100644
+index 6c626cd..0000000
+--- a/lib/features/settings/screens/settings_screen.dart
++++ /dev/null
+@@ -1,124 +0,0 @@
+-import 'package:adips/utils/constants/adips_palette.dart';
+-import 'package:adips/utils/constants/sizes.dart';
+-import 'package:adips/utils/helpers/helper_functions.dart';
+-import 'package:flutter/material.dart';
+-import 'package:get/get.dart';
+-
+-/// Settings screen, reached from the home screen's bottom action bar.
+-/// Tapping "Account" opens the Dashboard screen (profile details +
+-/// logout).
+-class SettingsScreen extends StatelessWidget {
+-  const SettingsScreen({super.key});
+-
+-  @override
+-  Widget build(BuildContext context) {
+-    final Map<String, dynamic> args = (Get.arguments as Map<String, dynamic>?) ?? {};
+-
+-    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+-    final backgroundColor = isDark ? AdipsPalette.darkBackground : AdipsPalette.lightBackground;
+-    final surfaceColor = isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField;
+-    final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
+-    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
+-    final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
+-    final brandColor = isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
+-
+-    return Scaffold(
+-      backgroundColor: backgroundColor,
+-      appBar: AppBar(
+-        title: const Text('Settings'),
+-        backgroundColor: backgroundColor,
+-        foregroundColor: textColor,
+-        elevation: 0,
+-      ),
+-      body: SafeArea(
+-        child: ListView(
+-          padding: const EdgeInsets.all(AdipsSizes.defaultSpace),
+-          children: [
+-            Text(
+-              'GENERAL',
+-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mutedColor, letterSpacing: 1),
+-            ),
+-            const SizedBox(height: AdipsSizes.spaceBtwItems),
+-            Container(
+-              decoration: BoxDecoration(
+-                color: surfaceColor,
+-                border: Border.all(color: lineColor),
+-                borderRadius: BorderRadius.circular(AdipsSizes.cardRadiusMg),
+-              ),
+-              child: Column(
+-                children: [
+-                  _SettingsTile(
+-                    icon: Icons.person_outline_rounded,
+-                    label: 'Account',
+-                    subtitle: 'Profile details, logout',
+-                    iconColor: brandColor,
+-                    textColor: textColor,
+-                    mutedColor: mutedColor,
+-                    onTap: () => Get.toNamed('/dashboard', arguments: args),
+-                  ),
+-                  Divider(height: 1, color: lineColor),
+-                  _SettingsTile(
+-                    icon: Icons.dark_mode_outlined,
+-                    label: 'Appearance',
+-                    subtitle: 'Follows your system theme',
+-                    iconColor: brandColor,
+-                    textColor: textColor,
+-                    mutedColor: mutedColor,
+-                    onTap: () {},
+-                  ),
+-                  Divider(height: 1, color: lineColor),
+-                  _SettingsTile(
+-                    icon: Icons.currency_rupee_rounded,
+-                    label: 'Currency',
+-                    subtitle: 'Default transaction currency',
+-                    iconColor: brandColor,
+-                    textColor: textColor,
+-                    mutedColor: mutedColor,
+-                    onTap: () {},
+-                  ),
+-                ],
+-              ),
+-            ),
+-          ],
+-        ),
+-      ),
+-    );
+-  }
+-}
+-
+-class _SettingsTile extends StatelessWidget {
+-  const _SettingsTile({
+-    required this.icon,
+-    required this.label,
+-    required this.subtitle,
+-    required this.iconColor,
+-    required this.textColor,
+-    required this.mutedColor,
+-    required this.onTap,
+-  });
+-
+-  final IconData icon;
+-  final String label;
+-  final String subtitle;
+-  final Color iconColor;
+-  final Color textColor;
+-  final Color mutedColor;
+-  final VoidCallback onTap;
+-
+-  @override
+-  Widget build(BuildContext context) {
+-    return ListTile(
+-      onTap: onTap,
+-      leading: Container(
+-        width: 40,
+-        height: 40,
+-        alignment: Alignment.center,
+-        decoration: BoxDecoration(color: iconColor.withOpacity(0.12), shape: BoxShape.circle),
+-        child: Icon(icon, size: 20, color: iconColor),
+-      ),
+-      title: Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
+-      subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: mutedColor)),
+-      trailing: Icon(Icons.chevron_right_rounded, color: mutedColor),
+-    );
+-  }
+-}
