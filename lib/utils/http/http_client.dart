@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import '../local_storage/storage_utility.dart';
+
 /// Thin wrapper around the `http` package.
 /// Every screen/controller should go through this instead of calling
 /// `http.get` / `http.post` directly, so headers, base URL, and error
@@ -22,6 +24,14 @@ import 'package:http/http.dart' as http;
 /// manually via the `cookie` param on authenticated requests.
 class AdipsHttpHelper {
   static const String _baseUrl = 'https://adips-backend.onrender.com';
+
+  /// The saved auth token, pre-formatted as the `Authorization=<token>`
+  /// cookie value every authenticated call needs to pass as `cookie:`.
+  /// Null when there's no saved token (not logged in).
+  static String? get authCookie {
+    final token = AdipsLocalStorage.token;
+    return token != null ? 'Authorization=$token' : null;
+  }
 
   static Map<String, String> _headers({String? cookie}) => {
     'Content-Type': 'application/json',
@@ -52,6 +62,22 @@ class AdipsHttpHelper {
     try {
       final response = await http
           .get(url, headers: _headers(cookie: cookie))
+          .timeout(const Duration(seconds: 15));
+      return _handleResponse(response);
+    } on http.ClientException {
+      throw Exception('Could not reach the server. Check your connection.');
+    }
+  }
+
+  static Future<Map<String, dynamic>> put(
+      String endpoint,
+      Map<String, dynamic> body, {
+        String? cookie,
+      }) async {
+    final url = Uri.parse('$_baseUrl$endpoint');
+    try {
+      final response = await http
+          .put(url, headers: _headers(cookie: cookie), body: jsonEncode(body))
           .timeout(const Duration(seconds: 15));
       return _handleResponse(response);
     } on http.ClientException {
@@ -104,6 +130,10 @@ class AdipsHttpHelper {
   static List<dynamic> listData(Map<String, dynamic> response) {
     return response['data'] as List<dynamic>? ?? [];
   }
+
+  /// Alias for [listData] — some services call this one, some call
+  /// that one; both do the same thing.
+  static List<dynamic> list(Map<String, dynamic> response) => listData(response);
 
   /// Unwraps the `meta` field (pagination info) from a decoded
   /// response envelope.
