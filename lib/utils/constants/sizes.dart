@@ -52,9 +52,15 @@ class AdipsSizes {
   static const double spaceBtwSections = 32.0;
 
   //border radius
+  // All "card" style radii are unified to match the Account Balance
+  // card on the home screen (AdipsSizes.borderRadiusSm), so sheets,
+  // tiles, and containers across the app read as one consistent
+  // design instead of a mix of 8/10/12/16px corners. Kept as
+  // separate named constants (rather than collapsing to one) so call
+  // sites stay descriptive and can diverge again later if needed.
   static const double borderRadiusSm = 5.0;
-  static const double borderRadiusMd = 8.0;
-  static const double borderRadiusLg = 12.0;
+  static const double borderRadiusMd = 5.0;
+  static const double borderRadiusLg = 5.0;
 
   //divider height
   static const double dividerHeight = 1.0;
@@ -64,16 +70,16 @@ class AdipsSizes {
   static const double inputFieldContentPadding = 10;
   static const double spaceBtwInputFields = 20.0;
 
-  //card sizes
-  static const double cardRadiusLg = 16.0;
-  static const double cardRadiusMg = 12.0;
-  static const double cardRadiusSm = 10.0;
-  static const double cardRadiusXs = 6.0;
+  //card sizes — unified with borderRadiusSm, see note above.
+  static const double cardRadiusLg = 5.0;
+  static const double cardRadiusMg = 5.0;
+  static const double cardRadiusSm = 5.0;
+  static const double cardRadiusXs = 5.0;
   static const double cardElevation = 2.0;
 
-  //image carousel height
+//image carousel height
 
-  //loading indicator height
+//loading indicator height
 
-  //grid view spacing
+//grid view spacing
 }

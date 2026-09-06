@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:adips/utils/constants/adips_palette.dart';
+import 'package:adips/utils/constants/sizes.dart';
 
 class AdipsListTileTheme {
   AdipsListTileTheme._();
@@ -30,7 +31,7 @@ class AdipsListTileTheme {
     minVerticalPadding: 8,
     dense: false,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(10)),
+      borderRadius: BorderRadius.all(Radius.circular(AdipsSizes.borderRadiusSm)),
     ),
   );
 
@@ -60,7 +61,7 @@ class AdipsListTileTheme {
     minVerticalPadding: 8,
     dense: false,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(10)),
+      borderRadius: BorderRadius.all(Radius.circular(AdipsSizes.borderRadiusSm)),
     ),
   );
 }

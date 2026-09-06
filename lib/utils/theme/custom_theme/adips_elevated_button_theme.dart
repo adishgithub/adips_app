@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:adips/utils/constants/adips_palette.dart';
+import 'package:adips/utils/constants/sizes.dart';
 
 class AdipsElevatedButtonTheme {
   AdipsElevatedButtonTheme._();
@@ -18,7 +19,7 @@ class AdipsElevatedButtonTheme {
         fontWeight: FontWeight.w600,
         fontFamily: 'Poppins',
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm)),
     ),
   );
 
@@ -36,7 +37,7 @@ class AdipsElevatedButtonTheme {
         fontWeight: FontWeight.w600,
         fontFamily: 'Poppins',
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm)),
     ),
   );
 }

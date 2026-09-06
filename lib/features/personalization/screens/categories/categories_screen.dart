@@ -84,7 +84,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       initialColorId: category.colorId,
       isDefault: category.isDefault,
       typeOptions:
-          _types.map((t) => ManageItemTypeOption(id: t.id, label: t.name)).toList(),
+      _types.map((t) => ManageItemTypeOption(id: t.id, label: t.name)).toList(),
       initialTypeId: category.transactionTypeId,
       onSave: ({required name, required iconId, typeId}) async {
         await _categoryService.update(
@@ -157,144 +157,146 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? _ErrorState(message: _error!, onRetry: _load)
-                : Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AdipsSizes.defaultSpace,
-                          AdipsSizes.sm,
-                          AdipsSizes.defaultSpace,
-                          0,
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _FilterChip(
-                                label: 'All',
-                                selected: _selectedTypeId == null,
-                                onTap: () => setState(() => _selectedTypeId = null),
-                              ),
-                              for (final type in _types) ...[
-                                const SizedBox(width: AdipsSizes.xs),
-                                _FilterChip(
-                                  label: type.name,
-                                  selected: _selectedTypeId == type.id,
-                                  onTap: () => setState(() => _selectedTypeId = type.id),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+            ? _ErrorState(message: _error!, onRetry: _load)
+            : Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AdipsSizes.defaultSpace,
+                AdipsSizes.sm,
+                AdipsSizes.defaultSpace,
+                0,
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _FilterChip(
+                      label: 'All',
+                      selected: _selectedTypeId == null,
+                      onTap: () => setState(() => _selectedTypeId = null),
+                    ),
+                    for (final type in _types) ...[
+                      const SizedBox(width: AdipsSizes.xs),
+                      _FilterChip(
+                        label: type.name,
+                        selected: _selectedTypeId == type.id,
+                        onTap: () => setState(() => _selectedTypeId = type.id),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.all(AdipsSizes.defaultSpace),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AdipsSizes.md),
-                          decoration: BoxDecoration(
-                            color: brandColor.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusMd),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(AdipsSizes.xs),
-                                decoration: BoxDecoration(
-                                  color: brandColor.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
-                                ),
-                                child: Icon(Icons.grid_view_rounded, color: brandColor, size: 20),
-                              ),
-                              const SizedBox(width: AdipsSizes.sm),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Customise your categories',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: AdipsSizes.fontSizesSm,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _selectedTypeId == null
-                                          ? 'Tap a category to edit it. Filter by type to drag and reorder.'
-                                          : 'Tap to edit. Long press and drag to reorder.',
-                                      style: TextStyle(
-                                        fontSize: AdipsSizes.fontSizesEs,
-                                        color: mutedColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: _visibleCategories.isEmpty
-                            ? Center(
-                                child: Text('No categories yet', style: TextStyle(color: mutedColor)),
-                              )
-                            : _selectedTypeId == null
-                                ? ListView.separated(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: AdipsSizes.defaultSpace,
-                                    ),
-                                    itemCount: _visibleCategories.length,
-                                    separatorBuilder: (_, __) =>
-                                        const SizedBox(height: AdipsSizes.sm),
-                                    itemBuilder: (context, index) {
-                                      final category = _visibleCategories[index];
-                                      return ManageableItemTile(
-                                        icon: AdipsIcons.byId(category.iconId),
-                                        color: AdipsCategoryColors.byId(category.colorId),
-                                        title: category.name,
-                                        subtitle: _typeName(category.transactionTypeId),
-                                        surfaceColor: surfaceColor,
-                                        lineColor: lineColor,
-                                        textColor: textColor,
-                                        mutedColor: mutedColor,
-                                        onTap: () => _openEditSheet(category),
-                                      );
-                                    },
-                                  )
-                                : ReorderableListView.builder(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: AdipsSizes.defaultSpace,
-                                    ),
-                                    itemCount: _visibleCategories.length,
-                                    onReorder: _handleReorder,
-                                    itemBuilder: (context, index) {
-                                      final category = _visibleCategories[index];
-                                      return Padding(
-                                        key: ValueKey('category-${category.id}'),
-                                        padding: const EdgeInsets.only(bottom: AdipsSizes.sm),
-                                        child: ManageableItemTile(
-                                          icon: AdipsIcons.byId(category.iconId),
-                                          color: AdipsCategoryColors.byId(category.colorId),
-                                          title: category.name,
-                                          subtitle: _typeName(category.transactionTypeId),
-                                          surfaceColor: surfaceColor,
-                                          lineColor: lineColor,
-                                          textColor: textColor,
-                                          mutedColor: mutedColor,
-                                          onTap: () => _openEditSheet(category),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                      ),
-                      const SizedBox(height: AdipsSizes.sm),
                     ],
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AdipsSizes.defaultSpace),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AdipsSizes.md),
+                decoration: BoxDecoration(
+                  color: brandColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusMd),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(AdipsSizes.xs),
+                      decoration: BoxDecoration(
+                        color: brandColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
+                      ),
+                      child: Icon(Icons.grid_view_rounded, color: brandColor, size: 20),
+                    ),
+                    const SizedBox(width: AdipsSizes.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Customise your categories',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: AdipsSizes.fontSizesSm,
+                              color: textColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _selectedTypeId == null
+                                ? 'Tap a category to edit it. Filter by type to drag and reorder.'
+                                : 'Tap to edit. Long press and drag to reorder.',
+                            style: TextStyle(
+                              fontSize: AdipsSizes.fontSizesEs,
+                              color: mutedColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: _visibleCategories.isEmpty
+                  ? Center(
+                child: Text('No categories yet', style: TextStyle(color: mutedColor)),
+              )
+                  : ClipRect(
+                child: _selectedTypeId == null
+                    ? ListView.separated(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AdipsSizes.defaultSpace,
                   ),
+                  itemCount: _visibleCategories.length,
+                  separatorBuilder: (_, __) =>
+                  const SizedBox(height: AdipsSizes.sm),
+                  itemBuilder: (context, index) {
+                    final category = _visibleCategories[index];
+                    return ManageableItemTile(
+                      icon: AdipsIcons.byId(category.iconId),
+                      color: AdipsCategoryColors.byId(category.colorId),
+                      title: category.name,
+                      subtitle: _typeName(category.transactionTypeId),
+                      surfaceColor: surfaceColor,
+                      lineColor: lineColor,
+                      textColor: textColor,
+                      mutedColor: mutedColor,
+                      onTap: () => _openEditSheet(category),
+                    );
+                  },
+                )
+                    : ReorderableListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AdipsSizes.defaultSpace,
+                  ),
+                  itemCount: _visibleCategories.length,
+                  onReorder: _handleReorder,
+                  itemBuilder: (context, index) {
+                    final category = _visibleCategories[index];
+                    return Padding(
+                      key: ValueKey('category-${category.id}'),
+                      padding: const EdgeInsets.only(bottom: AdipsSizes.sm),
+                      child: ManageableItemTile(
+                        icon: AdipsIcons.byId(category.iconId),
+                        color: AdipsCategoryColors.byId(category.colorId),
+                        title: category.name,
+                        subtitle: _typeName(category.transactionTypeId),
+                        surfaceColor: surfaceColor,
+                        lineColor: lineColor,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        onTap: () => _openEditSheet(category),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: AdipsSizes.sm),
+          ],
+        ),
       ),
     );
   }

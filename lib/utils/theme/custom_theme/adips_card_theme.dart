@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:adips/utils/constants/adips_palette.dart';
+import 'package:adips/utils/constants/sizes.dart';
 
 class AdipsCardTheme {
   AdipsCardTheme._();
@@ -10,7 +11,7 @@ class AdipsCardTheme {
     elevation: 0,
     margin: EdgeInsets.zero,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       side: const BorderSide(color: AdipsPalette.lightBorder, width: 0.5),
     ),
   );
@@ -21,7 +22,7 @@ class AdipsCardTheme {
     elevation: 0,
     margin: EdgeInsets.zero,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       side: const BorderSide(color: AdipsPalette.darkBorder, width: 0.5),
     ),
   );

@@ -1,9 +1,14 @@
 import 'package:adips/utils/constants/sizes.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/constants/adips_palette.dart';
+import '../../../utils/helpers/helper_functions.dart';
+
 /// A basic, reusable dropdown field. Generic over [T] so it can be used
 /// for currency, category, or any other picklist.
-/// No dark/light mode handling — plain fixed colors only.
+/// Mirrors CustomTextField's dark/light handling so every dropdown in
+/// the app matches the surrounding text fields instead of always
+/// rendering a plain white box.
 class CustomDropdown<T> extends StatelessWidget {
   const CustomDropdown({
     super.key,
@@ -31,46 +36,63 @@ class CustomDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+    final fillColor = isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField;
+    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
+    final labelColor =
+    isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
+    final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
+    final lossColor = isDark ? AdipsPalette.darkLoss : AdipsPalette.lightLoss;
+
     return DropdownButtonFormField<T>(
       value: value,
       validator: validator,
+      dropdownColor: fillColor,
+      style: TextStyle(color: textColor, fontSize: AdipsSizes.fontSizesMd),
       items: items
           .map(
             (item) => DropdownMenuItem<T>(
           value: item,
           child: Text(
             itemLabelBuilder != null ? itemLabelBuilder!(item) : item.toString(),
+            style: TextStyle(color: textColor),
           ),
         ),
       )
           .toList(),
       onChanged: onChanged,
-      icon: const Icon(Icons.keyboard_arrow_down),
+      icon: Icon(Icons.keyboard_arrow_down, color: labelColor),
       decoration: InputDecoration(
         labelText: labelText,
+        labelStyle: TextStyle(color: labelColor),
+        floatingLabelStyle: TextStyle(color: labelColor),
         hintText: hintText,
-        prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+        prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: labelColor) : null,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: fillColor,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AdipsSizes.md,
           vertical: AdipsSizes.md,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: const BorderSide(color: Colors.grey),
+          borderSide: BorderSide(color: fillColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: const BorderSide(color: Colors.grey),
+          borderSide: BorderSide(color: lineColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: const BorderSide(color: Colors.blue, width: 1.5),
+          borderSide: BorderSide(color: lineColor, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
-          borderSide: const BorderSide(color: Colors.red),
+          borderSide: BorderSide(color: lossColor),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AdipsSizes.inputFieldRadius),
+          borderSide: BorderSide(color: lossColor),
         ),
       ),
     );

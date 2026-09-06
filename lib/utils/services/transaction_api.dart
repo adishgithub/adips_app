@@ -57,11 +57,14 @@ class TransactionApi {
     required double amount,
     required String type,
     required String category,
+    required int categoryIconId,
+    required int categoryColorId,
     required String description,
     required String status,
     required String paymentMethod,
     String note = '',
     String currency = 'INR',
+    DateTime? transactionDate,
   }) async {
     final response = await AdipsHttpHelper.post(
       '/api/v1/transactions',
@@ -69,11 +72,14 @@ class TransactionApi {
         'amount': amount,
         'type': type,
         'category': category,
+        'category_icon_id': categoryIconId,
+        'category_color_id': categoryColorId,
         'description': description,
         'status': status,
         'payment_method': paymentMethod,
         'note': note,
         'currency': currency,
+        if (transactionDate != null) 'transaction_date': transactionDate.toUtc().toIso8601String(),
       },
       cookie: _cookie,
     );
@@ -85,25 +91,31 @@ class TransactionApi {
   /// UpdateTransactionRequest (pointer fields — omitted keys are left
   /// untouched server-side).
   static Future<AppTransaction> update(
-    int id, {
-    double? amount,
-    String? type,
-    String? category,
-    String? description,
-    String? status,
-    String? paymentMethod,
-    String? note,
-    String? currency,
-  }) async {
+      int id, {
+        double? amount,
+        String? type,
+        String? category,
+        int? categoryIconId,
+        int? categoryColorId,
+        String? description,
+        String? status,
+        String? paymentMethod,
+        String? note,
+        String? currency,
+        DateTime? transactionDate,
+      }) async {
     final body = <String, dynamic>{
       if (amount != null) 'amount': amount,
       if (type != null) 'type': type,
       if (category != null) 'category': category,
+      if (categoryIconId != null) 'category_icon_id': categoryIconId,
+      if (categoryColorId != null) 'category_color_id': categoryColorId,
       if (description != null) 'description': description,
       if (status != null) 'status': status,
       if (paymentMethod != null) 'payment_method': paymentMethod,
       if (note != null) 'note': note,
       if (currency != null) 'currency': currency,
+      if (transactionDate != null) 'transaction_date': transactionDate.toUtc().toIso8601String(),
     };
 
     final response = await AdipsHttpHelper.patch(

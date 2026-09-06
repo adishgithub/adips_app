@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../../utils/constants/adips_category_colors.dart';
+import '../../../../../utils/constants/adips_icons.dart';
 import '../../../../../utils/constants/adips_palette.dart';
 import '../../../../../utils/helpers/category_style.dart';
 import '../../../../../utils/helpers/helper_functions.dart';
@@ -57,7 +59,16 @@ class _TransactionTile extends StatelessWidget {
     final bool isIncome = item.isCredit;
     final Color amountColor = isIncome ? gainColor : lossColor;
     final String sign = isIncome ? '+' : '-';
-    final Color categoryColor = CategoryStyle.colorFor(item.category);
+    // Prefer the icon/color the user actually picked in the category
+    // dropdown (stored on the transaction itself) — only fall back to
+    // guessing from the category name for rows created before this
+    // snapshot existed (category_icon_id/category_color_id == 0).
+    final Color categoryColor = item.categoryColorId > 0
+        ? AdipsCategoryColors.byId(item.categoryColorId)
+        : CategoryStyle.colorFor(item.category);
+    final IconData categoryIcon = item.categoryIconId > 0
+        ? AdipsIcons.byId(item.categoryIconId)
+        : CategoryStyle.iconFor(item.category);
 
     return InkWell(
       onTap: () => showTransactionFormSheet(context, transaction: item),
@@ -74,7 +85,7 @@ class _TransactionTile extends StatelessWidget {
                 color: categoryColor.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(CategoryStyle.iconFor(item.category), size: 20, color: categoryColor),
+              child: Icon(categoryIcon, size: 20, color: categoryColor),
             ),
             const SizedBox(width: 12),
             Expanded(

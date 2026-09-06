@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:adips/utils/constants/adips_palette.dart';
+import 'package:adips/utils/constants/sizes.dart';
 
 class AdipsOutlinedButtonTheme {
   AdipsOutlinedButtonTheme._();
@@ -15,7 +16,7 @@ class AdipsOutlinedButtonTheme {
         fontWeight: FontWeight.w500,
         fontFamily: 'Poppins',
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm)),
     ),
   );
 
@@ -30,7 +31,7 @@ class AdipsOutlinedButtonTheme {
         fontWeight: FontWeight.w500,
         fontFamily: 'Poppins',
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm)),
     ),
   );
 }

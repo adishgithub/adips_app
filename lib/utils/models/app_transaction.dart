@@ -10,6 +10,8 @@ class AppTransaction {
     required this.amount,
     required this.type,
     required this.category,
+    required this.categoryIconId,
+    required this.categoryColorId,
     required this.description,
     required this.status,
     required this.paymentMethod,
@@ -28,6 +30,16 @@ class AppTransaction {
   /// TransactionDirection enum.
   final String type;
   final String category;
+
+  /// Snapshot of the category's icon/color *at the time this
+  /// transaction was created* (see adips_backend's
+  /// Transaction.CategoryIconID/CategoryColorID) — used to render the
+  /// exact icon the user picked in the category dropdown, instead of
+  /// guessing one from the category name. 0 on older rows created
+  /// before this field existed; callers should fall back to
+  /// CategoryStyle in that case.
+  final int categoryIconId;
+  final int categoryColorId;
   final String description;
 
   /// "pending" | "completed" | "failed"
@@ -48,6 +60,8 @@ class AppTransaction {
       amount: _asDouble(json['amount']),
       type: (json['type'] ?? 'debit').toString(),
       category: (json['category'] ?? '').toString(),
+      categoryIconId: _asInt(json['category_icon_id']),
+      categoryColorId: _asInt(json['category_color_id']),
       description: (json['description'] ?? '').toString(),
       status: (json['status'] ?? 'completed').toString(),
       paymentMethod: (json['payment_method'] ?? '').toString(),

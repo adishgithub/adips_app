@@ -126,7 +126,7 @@ class HomeController extends GetxController {
       final start = DateTime(range.start.year, range.start.month, range.start.day);
       final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
       filtered = filtered.where(
-        (t) => !t.transactionDate.isBefore(start) && !t.transactionDate.isAfter(end),
+            (t) => !t.transactionDate.isBefore(start) && !t.transactionDate.isAfter(end),
       );
     }
 
@@ -152,11 +152,14 @@ class HomeController extends GetxController {
     required double amount,
     required String type,
     required String category,
+    required int categoryIconId,
+    required int categoryColorId,
     required String description,
     required String status,
     required String paymentMethod,
     String note = '',
     String currency = 'INR',
+    DateTime? transactionDate,
   }) async {
     isMutating.value = true;
     try {
@@ -164,11 +167,14 @@ class HomeController extends GetxController {
         amount: amount,
         type: type,
         category: category,
+        categoryIconId: categoryIconId,
+        categoryColorId: categoryColorId,
         description: description,
         status: status,
         paymentMethod: paymentMethod,
         note: note,
         currency: currency,
+        transactionDate: transactionDate,
       );
       await _refreshQuietly();
       Get.snackbar('Added', 'Transaction created', snackPosition: SnackPosition.BOTTOM);
@@ -186,16 +192,19 @@ class HomeController extends GetxController {
   }
 
   Future<bool> updateTransaction(
-    int id, {
-    double? amount,
-    String? type,
-    String? category,
-    String? description,
-    String? status,
-    String? paymentMethod,
-    String? note,
-    String? currency,
-  }) async {
+      int id, {
+        double? amount,
+        String? type,
+        String? category,
+        int? categoryIconId,
+        int? categoryColorId,
+        String? description,
+        String? status,
+        String? paymentMethod,
+        String? note,
+        String? currency,
+        DateTime? transactionDate,
+      }) async {
     isMutating.value = true;
     try {
       await TransactionApi.update(
@@ -203,11 +212,14 @@ class HomeController extends GetxController {
         amount: amount,
         type: type,
         category: category,
+        categoryIconId: categoryIconId,
+        categoryColorId: categoryColorId,
         description: description,
         status: status,
         paymentMethod: paymentMethod,
         note: note,
         currency: currency,
+        transactionDate: transactionDate,
       );
       await _refreshQuietly();
       Get.snackbar('Saved', 'Transaction updated', snackPosition: SnackPosition.BOTTOM);

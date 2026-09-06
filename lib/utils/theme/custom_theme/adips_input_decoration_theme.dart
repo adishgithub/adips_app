@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:adips/utils/constants/adips_palette.dart';
+import 'package:adips/utils/constants/sizes.dart';
 
 class AdipsInputDecorationTheme {
   AdipsInputDecorationTheme._();
@@ -31,27 +32,27 @@ class AdipsInputDecorationTheme {
     suffixIconColor: AdipsPalette.lightTextMuted,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.lightBorder, width: 0.5),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.lightBorder, width: 0.5),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.lightAction, width: 1.5),
     ),
     errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.lightLoss, width: 0.5),
     ),
     focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.lightLoss, width: 1.5),
     ),
     disabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(
         color: AdipsPalette.lightDivider,
         width: 0.5,
@@ -86,27 +87,27 @@ class AdipsInputDecorationTheme {
     suffixIconColor: AdipsPalette.darkTextMuted,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.darkBorder, width: 0.5),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.darkBorder, width: 0.5),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.darkAction, width: 1.5),
     ),
     errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.darkLoss, width: 0.5),
     ),
     focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.darkLoss, width: 1.5),
     ),
     disabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
       borderSide: const BorderSide(color: AdipsPalette.darkDivider, width: 0.5),
     ),
   );
