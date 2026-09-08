@@ -101,6 +101,39 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     if (changed == true) _load();
   }
 
+  /// Opens the same sheet in "add" mode. A category always needs a
+  /// type, so the dropdown is always shown here — pre-selected to
+  /// whichever filter chip is currently active, if any.
+  Future<void> _openCreateSheet() async {
+    if (_types.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a transaction type first.')),
+      );
+      return;
+    }
+    final changed = await showManageItemSheet(
+      context: context,
+      title: 'Add Category',
+      isEditing: false,
+      typeOptions:
+      _types.map((t) => ManageItemTypeOption(id: t.id, label: t.name)).toList(),
+      initialTypeId: _selectedTypeId,
+      onSave: ({required name, required iconId, typeId}) async {
+        // Color isn't picked in the add flow — cycle through the
+        // fixed 8-color palette so new categories don't all land on
+        // the same color.
+        final colorId = (_categories.length % 8) + 1;
+        await _categoryService.create(
+          transactionTypeId: typeId!,
+          name: name,
+          iconId: iconId,
+          colorId: colorId,
+        );
+      },
+    );
+    if (changed == true) _load();
+  }
+
   /// Persists a drag-reorder within the currently filtered (single
   /// type) list — reordering only ever makes sense within one type
   /// since sort_order is scoped per user+type on the backend.
@@ -152,6 +185,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         ),
         title: const Text('Categories'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Add category',
+            onPressed: _openCreateSheet,
+          ),
+        ],
       ),
       body: SafeArea(
         child: _loading

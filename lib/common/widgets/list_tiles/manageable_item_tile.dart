@@ -36,21 +36,29 @@ class ManageableItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: surfaceColor,
         borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusMd),
         border: Border.all(color: lineColor),
       ),
-      child: ListTile(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.15),
-          child: Icon(icon, color: color),
+      // The background fill lives on this Material (not the outer
+      // Container's BoxDecoration) so ListTile finds it as its
+      // nearest Material ancestor — otherwise the ink splash / tap
+      // highlight paints underneath the opaque decoration and never
+      // shows up.
+      child: Material(
+        color: surfaceColor,
+        child: ListTile(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          leading: CircleAvatar(
+            backgroundColor: color.withOpacity(0.15),
+            child: Icon(icon, color: color),
+          ),
+          title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
+          subtitle: subtitle != null ? Text(subtitle!, style: TextStyle(color: mutedColor)) : null,
+          trailing: Icon(Icons.chevron_right_rounded, color: mutedColor),
         ),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
-        subtitle: subtitle != null ? Text(subtitle!, style: TextStyle(color: mutedColor)) : null,
-        trailing: Icon(Icons.chevron_right_rounded, color: mutedColor),
       ),
     );
   }

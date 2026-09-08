@@ -20,28 +20,36 @@ class ManageItemTypeOption {
   final String label;
 }
 
-/// Shared edit sheet used by both the Transaction Types screen and
-/// the Categories screen — same name field, icon picker, and delete
-/// button; the type dropdown only renders when [typeOptions] is
-/// passed in (i.e. only for categories).
+/// Shared sheet used by both the Transaction Types screen and the
+/// Categories screen for adding *and* editing — same name field, icon
+/// picker, and delete button; the type dropdown only renders when
+/// [typeOptions] is passed in (i.e. only for categories).
 ///
-/// Returns true if the item was saved or deleted (so the caller knows
-/// to refresh its list), false/null otherwise.
+/// Pass [isEditing] = false (and omit [onDelete] / [isDefault] /
+/// [initialColorId]) to open it in "add" mode: the delete section is
+/// hidden entirely since there's nothing to delete yet, and the icon
+/// preview falls back to the brand color since no color has been
+/// assigned. The actual color is picked by the caller inside [onSave]
+/// (the add flow never exposes color choice to the user).
+///
+/// Returns true if the item was saved/created or deleted (so the
+/// caller knows to refresh its list), false/null otherwise.
 Future<bool?> showManageItemSheet({
   required BuildContext context,
   required String title,
-  required String initialName,
-  required int initialIconId,
-  required int initialColorId,
-  required bool isDefault,
+  String initialName = '',
+  int initialIconId = 1,
+  int? initialColorId,
+  bool isDefault = false,
+  bool isEditing = true,
   List<ManageItemTypeOption>? typeOptions,
   int? initialTypeId,
   required Future<void> Function({
-    required String name,
-    required int iconId,
-    int? typeId,
+  required String name,
+  required int iconId,
+  int? typeId,
   }) onSave,
-  required Future<void> Function() onDelete,
+  Future<void> Function()? onDelete,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -53,6 +61,7 @@ Future<bool?> showManageItemSheet({
       initialIconId: initialIconId,
       initialColorId: initialColorId,
       isDefault: isDefault,
+      isEditing: isEditing,
       typeOptions: typeOptions,
       initialTypeId: initialTypeId,
       onSave: onSave,
@@ -68,6 +77,7 @@ class _ManageItemSheet extends StatefulWidget {
     required this.initialIconId,
     required this.initialColorId,
     required this.isDefault,
+    required this.isEditing,
     required this.typeOptions,
     required this.initialTypeId,
     required this.onSave,
@@ -77,12 +87,13 @@ class _ManageItemSheet extends StatefulWidget {
   final String title;
   final String initialName;
   final int initialIconId;
-  final int initialColorId;
+  final int? initialColorId;
   final bool isDefault;
+  final bool isEditing;
   final List<ManageItemTypeOption>? typeOptions;
   final int? initialTypeId;
   final Future<void> Function({required String name, required int iconId, int? typeId}) onSave;
-  final Future<void> Function() onDelete;
+  final Future<void> Function()? onDelete;
 
   @override
   State<_ManageItemSheet> createState() => _ManageItemSheetState();
@@ -137,9 +148,11 @@ class _ManageItemSheetState extends State<_ManageItemSheet> {
   }
 
   Future<void> _delete() async {
+    final onDelete = widget.onDelete;
+    if (onDelete == null) return;
     setState(() => _isDeleting = true);
     try {
-      await widget.onDelete();
+      await onDelete();
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -160,7 +173,14 @@ class _ManageItemSheetState extends State<_ManageItemSheet> {
     final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
     final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
     final lossColor = isDark ? AdipsPalette.darkLoss : AdipsPalette.lightLoss;
-    final accentColor = AdipsCategoryColors.byId(widget.initialColorId);
+    final brandColor =
+    isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
+    // No color has been assigned yet in "add" mode (color is chosen
+    // by the caller inside onSave), so the icon preview just uses the
+    // brand color instead of a real category color.
+    final accentColor = widget.initialColorId != null
+        ? AdipsCategoryColors.byId(widget.initialColorId!)
+        : brandColor;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -242,7 +262,7 @@ class _ManageItemSheetState extends State<_ManageItemSheet> {
                     ),
                   ),
                   validator: (value) =>
-                      (value == null || value.trim().isEmpty) ? 'Name is required' : null,
+                  (value == null || value.trim().isEmpty) ? 'Name is required' : null,
                 ),
 
                 // Type dropdown — categories only
@@ -253,7 +273,7 @@ class _ManageItemSheetState extends State<_ManageItemSheet> {
                     labelText: 'Transaction Type',
                     items: widget.typeOptions!.map((t) => t.id).toList(),
                     itemLabelBuilder: (id) =>
-                        widget.typeOptions!.firstWhere((t) => t.id == id).label,
+                    widget.typeOptions!.firstWhere((t) => t.id == id).label,
                     onChanged: (value) => setState(() => _typeId = value),
                     validator: (value) => value == null ? 'Select a type' : null,
                   ),
@@ -268,36 +288,39 @@ class _ManageItemSheetState extends State<_ManageItemSheet> {
                 ),
                 const SizedBox(height: AdipsSizes.sm),
 
-                // Delete — hidden entirely for system-default items,
-                // which the backend rejects deleting anyway.
-                if (!widget.isDefault)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton.icon(
-                      onPressed: _isSaving || _isDeleting ? null : _delete,
-                      icon: _isDeleting
-                          ? SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: lossColor),
-                            )
-                          : Icon(Icons.delete_outline_rounded, color: lossColor),
-                      label: Text('Delete', style: TextStyle(color: lossColor)),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: lossColor),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AdipsSizes.buttonRadius),
+                // Delete section — only relevant once the item
+                // actually exists. Hidden entirely in "add" mode, and
+                // for system-default items (which the backend rejects
+                // deleting anyway).
+                if (widget.isEditing)
+                  if (!widget.isDefault && widget.onDelete != null)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: OutlinedButton.icon(
+                        onPressed: _isSaving || _isDeleting ? null : _delete,
+                        icon: _isDeleting
+                            ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: lossColor),
+                        )
+                            : Icon(Icons.delete_outline_rounded, color: lossColor),
+                        label: Text('Delete', style: TextStyle(color: lossColor)),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: lossColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AdipsSizes.buttonRadius),
+                          ),
                         ),
                       ),
+                    )
+                  else
+                    Text(
+                      'Default items can\'t be deleted.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: AdipsSizes.fontSizesEs, color: mutedColor),
                     ),
-                  )
-                else
-                  Text(
-                    'Default items can\'t be deleted.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: AdipsSizes.fontSizesEs, color: mutedColor),
-                  ),
               ],
             ),
           ),

@@ -64,6 +64,24 @@ class _TransactionTypesScreenState extends State<TransactionTypesScreen> {
     if (changed == true) _load();
   }
 
+  /// Opens the same sheet in "add" mode — a transaction type has no
+  /// type dropdown of its own (it *is* the type).
+  Future<void> _openCreateSheet() async {
+    final changed = await showManageItemSheet(
+      context: context,
+      title: 'Add Transaction Type',
+      isEditing: false,
+      onSave: ({required name, required iconId, typeId}) async {
+        // Color isn't picked in the add flow — cycle through the
+        // fixed 8-color palette so new types don't all land on the
+        // same color.
+        final colorId = (_types.length % 8) + 1;
+        await _service.create(name: name, iconId: iconId, colorId: colorId);
+      },
+    );
+    if (changed == true) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDark = AdipsHelperFunctions.isDarkMode(context);
@@ -81,37 +99,44 @@ class _TransactionTypesScreenState extends State<TransactionTypesScreen> {
         ),
         title: const Text('Transaction Types'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Add transaction type',
+            onPressed: _openCreateSheet,
+          ),
+        ],
       ),
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? _ErrorState(message: _error!, onRetry: _load)
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AdipsSizes.defaultSpace,
-                        vertical: AdipsSizes.md,
-                      ),
-                      itemCount: _types.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: AdipsSizes.sm),
-                      itemBuilder: (context, index) {
-                        final type = _types[index];
-                        return ManageableItemTile(
-                          icon: AdipsIcons.byId(type.iconId),
-                          color: AdipsCategoryColors.byId(type.colorId),
-                          title: type.name,
-                          subtitle: type.isDefault ? 'Default' : null,
-                          surfaceColor: surfaceColor,
-                          lineColor: lineColor,
-                          textColor: textColor,
-                          mutedColor: mutedColor,
-                          onTap: () => _openEditSheet(type),
-                        );
-                      },
-                    ),
-                  ),
+            ? _ErrorState(message: _error!, onRetry: _load)
+            : RefreshIndicator(
+          onRefresh: _load,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AdipsSizes.defaultSpace,
+              vertical: AdipsSizes.md,
+            ),
+            itemCount: _types.length,
+            separatorBuilder: (_, __) => const SizedBox(height: AdipsSizes.sm),
+            itemBuilder: (context, index) {
+              final type = _types[index];
+              return ManageableItemTile(
+                icon: AdipsIcons.byId(type.iconId),
+                color: AdipsCategoryColors.byId(type.colorId),
+                title: type.name,
+                subtitle: type.isDefault ? 'Default' : null,
+                surfaceColor: surfaceColor,
+                lineColor: lineColor,
+                textColor: textColor,
+                mutedColor: mutedColor,
+                onTap: () => _openEditSheet(type),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

@@ -15,12 +15,29 @@ class TransactionTypeService {
         .toList();
   }
 
-  Future<TransactionTypeModel> update(
-    int id, {
-    String? name,
-    int? iconId,
-    int? colorId,
+  Future<TransactionTypeModel> create({
+    required String name,
+    required int iconId,
+    required int colorId,
   }) async {
+    final response = await AdipsHttpHelper.post(
+      AdipsApiConstants.transactionTypes,
+      {
+        'name': name,
+        'icon_id': iconId,
+        'color_id': colorId,
+      },
+      cookie: AdipsHttpHelper.authCookie,
+    );
+    return TransactionTypeModel.fromJson(AdipsHttpHelper.data(response));
+  }
+
+  Future<TransactionTypeModel> update(
+      int id, {
+        String? name,
+        int? iconId,
+        int? colorId,
+      }) async {
     final response = await AdipsHttpHelper.put(
       AdipsApiConstants.transactionType(id),
       {

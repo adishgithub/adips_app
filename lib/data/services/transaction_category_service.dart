@@ -20,13 +20,32 @@ class TransactionCategoryService {
         .toList();
   }
 
-  Future<TransactionCategoryModel> update(
-    int id, {
-    int? transactionTypeId,
-    String? name,
-    int? iconId,
-    int? colorId,
+  Future<TransactionCategoryModel> create({
+    required int transactionTypeId,
+    required String name,
+    required int iconId,
+    required int colorId,
   }) async {
+    final response = await AdipsHttpHelper.post(
+      AdipsApiConstants.categories,
+      {
+        'transaction_type_id': transactionTypeId,
+        'name': name,
+        'icon_id': iconId,
+        'color_id': colorId,
+      },
+      cookie: AdipsHttpHelper.authCookie,
+    );
+    return TransactionCategoryModel.fromJson(AdipsHttpHelper.data(response));
+  }
+
+  Future<TransactionCategoryModel> update(
+      int id, {
+        int? transactionTypeId,
+        String? name,
+        int? iconId,
+        int? colorId,
+      }) async {
     final response = await AdipsHttpHelper.put(
       AdipsApiConstants.category(id),
       {
