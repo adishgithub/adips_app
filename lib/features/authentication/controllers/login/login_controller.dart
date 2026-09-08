@@ -40,6 +40,7 @@ class LoginController extends GetxController {
       // no longer need a separate /validate round trip here.
       final user = data['user'] as Map<String, dynamic>? ?? {};
       final String fullName = (user['name'] ?? '').toString();
+      await AdipsLocalStorage.saveCachedUser(fullName, email);
 
       Get.offAllNamed('/home', arguments: {
         'fullName': fullName,

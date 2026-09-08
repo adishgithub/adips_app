@@ -1,7 +1,22 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../local_storage/storage_utility.dart';
+
+/// Thrown for a real HTTP response with a non-2xx status code
+/// (e.g. 401 from an invalid/expired token, 404, 500...).
+/// Distinguish this from network failures / timeouts, which throw
+/// plain [Exception] / [TimeoutException] instead — only an
+/// [ApiException] with statusCode 401 means "the token is actually
+/// invalid," everything else means "we don't know yet."
+class ApiException implements Exception {
+  final int statusCode;
+  final String message;
+  ApiException(this.message, {required this.statusCode});
+  @override
+  String toString() => message;
+}
 
 /// Thin wrapper around the `http` package.
 /// Every screen/controller should go through this instead of calling
@@ -57,12 +72,13 @@ class AdipsHttpHelper {
   static Future<Map<String, dynamic>> get(
       String endpoint, {
         String? cookie,
+        Duration timeout = const Duration(seconds: 15),
       }) async {
     final url = Uri.parse('$_baseUrl$endpoint');
     try {
       final response = await http
           .get(url, headers: _headers(cookie: cookie))
-          .timeout(const Duration(seconds: 15));
+          .timeout(timeout);
       return _handleResponse(response);
     } on http.ClientException {
       throw Exception('Could not reach the server. Check your connection.');
@@ -154,6 +170,6 @@ class AdipsHttpHelper {
     final String message = (decoded is Map && decoded['message'] != null)
         ? decoded['message'].toString()
         : 'Something went wrong (${response.statusCode})';
-    throw Exception(message);
+    throw ApiException(message, statusCode: response.statusCode);
   }
 }
