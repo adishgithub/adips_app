@@ -6,6 +6,7 @@ import '../../../../common/widgets/list_tiles/settings_tile.dart';
 import '../../../../utils/constants/adips_palette.dart';
 import '../../../../utils/constants/sizes.dart';
 import '../../../../utils/helpers/helper_functions.dart';
+import '../accounts/accounts_screen.dart';
 import '../categories/categories_screen.dart';
 import '../transaction_types/transaction_types_screen.dart';
 
@@ -64,6 +65,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SettingsSectionCard(
                 label: 'Transaction Settings',
                 children: [
+                  SettingsTile(
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: 'Accounts',
+                    subtitle: 'Cash, bank, savings & more',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AccountsScreen()),
+                    ),
+                  ),
                   SettingsTile(
                     icon: Icons.sell_outlined,
                     title: 'Transaction Types',
