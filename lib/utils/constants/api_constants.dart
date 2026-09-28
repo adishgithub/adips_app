@@ -23,6 +23,21 @@ class AdipsApiConstants {
   static String category(int id) => '$categories/$id';
   static const String categoriesReorder = '$categories/reorder';
 
+  // ---- /api/v1/accounts ----------------------------------------------
+  static const String accounts = '/api/v1/accounts';
+  static String account(int id) => '$accounts/$id';
+  static const String accountsSummary = '$accounts/summary';
+  static const String accountsReorder = '$accounts/reorder';
+  static String accountArchive(int id) => '$accounts/$id/archive';
+  static String accountUnarchive(int id) => '$accounts/$id/unarchive';
+  static String accountDeletePreview(int id) => '$accounts/$id/delete-preview';
+  static String accountAdjust(int id) => '$accounts/$id/adjust';
+
+  // ---- /api/v1/transfers ---------------------------------------------
+  // [groupId] is the transfer_group_id UUID string, not an int.
+  static const String transfers = '/api/v1/transfers';
+  static String transfer(String groupId) => '$transfers/$groupId';
+
   // ---- /api/v1/users --------------------------------------------------
   static const String signup = '/api/v1/users/signup';
   static const String login = '/api/v1/users/login';

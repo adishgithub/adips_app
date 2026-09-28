@@ -7,6 +7,8 @@ class AppTransaction {
   const AppTransaction({
     required this.id,
     required this.userId,
+    required this.accountId,
+    required this.accountName,
     required this.amount,
     required this.type,
     required this.category,
@@ -20,10 +22,17 @@ class AppTransaction {
     required this.currency,
     required this.createdAt,
     required this.updatedAt,
+    this.transferGroupId,
   });
 
   final int id;
   final int userId;
+
+  /// The account this transaction belongs to (required by the backend
+  /// on create, rule T1). [accountName] is resolved server-side so
+  /// renaming an account shows everywhere (D6).
+  final int accountId;
+  final String accountName;
   final double amount;
 
   /// Always "credit" or "debit" — matches the backend's
@@ -51,12 +60,20 @@ class AppTransaction {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// Non-null only on the two legs of a transfer (both legs share the
+  /// same id). Such rows can't be edited/deleted via /transactions
+  /// (T4) — use /transfers instead.
+  final String? transferGroupId;
+
   bool get isCredit => type == 'credit';
+  bool get isTransfer => transferGroupId != null;
 
   factory AppTransaction.fromJson(Map<String, dynamic> json) {
     return AppTransaction(
       id: _asInt(json['id']),
       userId: _asInt(json['user_id']),
+      accountId: _asInt(json['account_id']),
+      accountName: (json['account_name'] ?? '').toString(),
       amount: _asDouble(json['amount']),
       type: (json['type'] ?? 'debit').toString(),
       category: (json['category'] ?? '').toString(),
@@ -70,6 +87,7 @@ class AppTransaction {
       currency: (json['currency'] ?? 'INR').toString(),
       createdAt: _asDate(json['created_at']),
       updatedAt: _asDate(json['updated_at']),
+      transferGroupId: _asNullableString(json['transfer_group_id']),
     );
   }
 
@@ -86,6 +104,11 @@ class AppTransaction {
     if (v is int) return v;
     if (v is num) return v.toInt();
     return int.tryParse(v?.toString() ?? '') ?? 0;
+  }
+
+  static String? _asNullableString(dynamic v) {
+    final str = v?.toString();
+    return (str == null || str.isEmpty) ? null : str;
   }
 
   static double _asDouble(dynamic v) {

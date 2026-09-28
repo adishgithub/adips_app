@@ -115,7 +115,7 @@ class _TransactionTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '$sign ₹${item.amount.toStringAsFixed(2)}',
+                  '$sign ${AdipsFormatters.money(item.amount, item.currency)}',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: amountColor),
                 ),
                 if (item.status != 'completed') ...[

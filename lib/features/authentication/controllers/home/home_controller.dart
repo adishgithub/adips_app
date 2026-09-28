@@ -1,3 +1,4 @@
+import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/sort_filter.dart';
 import 'package:adips/utils/http/http_client.dart';
 import 'package:adips/utils/local_storage/storage_utility.dart';
@@ -76,6 +77,9 @@ class HomeController extends GetxController {
       final results = await Future.wait([
         TransactionApi.list(sortBy: 'transaction_date', order: 'desc'),
         TransactionApi.summary(),
+        // Balances live on the backend; reload them with the list so
+        // the two are never out of sync. Handles its own errors.
+        AccountController.instance.load(),
       ]);
       transactions.assignAll(results[0] as List<AppTransaction>);
       summary.value = results[1] as TransactionSummary;
@@ -98,6 +102,8 @@ class HomeController extends GetxController {
       final results = await Future.wait([
         TransactionApi.list(sortBy: 'transaction_date', order: 'desc'),
         TransactionApi.summary(),
+        // Any create/update/delete changes account balances too.
+        AccountController.instance.refreshQuietly(),
       ]);
       transactions.assignAll(results[0] as List<AppTransaction>);
       summary.value = results[1] as TransactionSummary;
@@ -109,6 +115,11 @@ class HomeController extends GetxController {
       );
     }
   }
+
+  /// Currency the income/expense strip is shown in: the default
+  /// account's (extended in step 1.9 to follow the selected account).
+  String get summaryCurrency =>
+      AccountController.instance.defaultAccount?.currency ?? 'INR';
 
   // ---- Local search / sort / date-range over the fetched list -----
 
@@ -149,6 +160,7 @@ class HomeController extends GetxController {
   // ---- Mutations ----------------------------------------------------
 
   Future<bool> createTransaction({
+    required int accountId,
     required double amount,
     required String type,
     required String category,
@@ -164,6 +176,7 @@ class HomeController extends GetxController {
     isMutating.value = true;
     try {
       await TransactionApi.create(
+        accountId: accountId,
         amount: amount,
         type: type,
         category: category,
@@ -193,6 +206,7 @@ class HomeController extends GetxController {
 
   Future<bool> updateTransaction(
       int id, {
+        int? accountId,
         double? amount,
         String? type,
         String? category,
@@ -209,6 +223,7 @@ class HomeController extends GetxController {
     try {
       await TransactionApi.update(
         id,
+        accountId: accountId,
         amount: amount,
         type: type,
         category: category,

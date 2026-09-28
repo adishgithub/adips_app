@@ -1,0 +1,328 @@
+diff --git a/lib/features/authentication/screens/homepage/home.dart b/lib/features/authentication/screens/homepage/home.dart
+index a0b46c9..b4396db 100644
+--- a/lib/features/authentication/screens/homepage/home.dart
++++ b/lib/features/authentication/screens/homepage/home.dart
+@@ -1,6 +1,8 @@
+ import 'package:adips/common/widgets/navigation/bottom_action_bar.dart';
++import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
+ import 'package:adips/features/authentication/controllers/home/home_controller.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/account_balance.dart';
++import 'package:adips/features/authentication/screens/homepage/widgets/account_cards.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/date_range_filter.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/greeting_header.dart';
+ import 'package:adips/features/authentication/screens/homepage/widgets/sort_filter.dart';
+@@ -24,6 +26,7 @@ class HomeScreen extends StatefulWidget {
+ 
+ class _HomeScreenState extends State<HomeScreen> {
+   final HomeController controller = HomeController.instance;
++  final AccountController accountController = AccountController.instance;
+   final TextEditingController _searchController = TextEditingController();
+ 
+   @override
+@@ -65,7 +68,12 @@ class _HomeScreenState extends State<HomeScreen> {
+                       email: controller.email.value,
+                     ),
+                     SizedBox(height: AdipsSizes.spaceBtwSections),
+-                    AccountBalance(accountBalance: controller.summary.value.balance),
++                    // Total comes from /accounts/summary (real balances),
++                    // NOT transactions/summary.balance, which is only the
++                    // net flow of the filtered rows.
++                    AccountBalance(totals: accountController.summary.value.totals),
++                    SizedBox(height: AdipsSizes.spaceBtwItems),
++                    AccountCards(accounts: accountController.accounts.toList()),
+                     SizedBox(height: AdipsSizes.spaceBtwSections),
+                     Row(
+                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+diff --git a/lib/features/authentication/screens/homepage/widgets/account_balance.dart b/lib/features/authentication/screens/homepage/widgets/account_balance.dart
+index f96ac8f..e4f4849 100644
+--- a/lib/features/authentication/screens/homepage/widgets/account_balance.dart
++++ b/lib/features/authentication/screens/homepage/widgets/account_balance.dart
+@@ -3,17 +3,34 @@ import 'package:flutter/material.dart';
+ import '../../../../../utils/constants/adips_palette.dart';
+ import '../../../../../utils/constants/sizes.dart';
+ import '../../../../../utils/helpers/helper_functions.dart';
++import '../../../../../utils/models/account_model.dart';
+ 
++/// Total balance across the accounts that count toward the total
++/// (include_in_total, rule A13), straight from /accounts/summary.
++///
++/// Totals arrive grouped by currency (D7) and are NEVER added together
++/// here: the first currency is the big number, any others appear as
++/// smaller lines under it.
+ class AccountBalance extends StatelessWidget {
+   const AccountBalance({
+     super.key,
+-    required this.accountBalance,
++    required this.totals,
++    this.fallbackCurrency = 'INR',
+   });
+ 
+-  final double accountBalance;
++  final List<AccountSummaryTotal> totals;
++
++  /// Shown as 0.00 when there are no totals yet (loading / no accounts).
++  final String fallbackCurrency;
+ 
+   @override
+   Widget build(BuildContext context) {
++    final AccountSummaryTotal primary = totals.isNotEmpty
++        ? totals.first
++        : AccountSummaryTotal(currency: fallbackCurrency, totalBalance: 0);
++    final List<AccountSummaryTotal> others =
++        totals.length > 1 ? totals.sublist(1) : const [];
++
+     return Container(
+       width: double.infinity,
+       decoration: BoxDecoration(
+@@ -47,7 +64,7 @@ class AccountBalance extends StatelessWidget {
+                 crossAxisAlignment: CrossAxisAlignment.start,
+                 children: [
+                   Text(
+-                    'Account Balance',
++                    'Total Balance',
+                     style: TextStyle(
+                       color: AdipsPalette.lightPrimaryButtonText.withOpacity(0.85),
+                       fontSize: AdipsSizes.fontSizesSm,
+@@ -55,28 +72,29 @@ class AccountBalance extends StatelessWidget {
+                     ),
+                   ),
+                   SizedBox(height: AdipsSizes.spaceBtwFontsSm),
+-                  Row(
+-                    crossAxisAlignment: CrossAxisAlignment.center,
+-                    children: [
+-                      const Text(
+-                        '₹',
+-                        style: TextStyle(
+-                          color: Colors.white,
+-                          fontSize: 28,
+-                          fontWeight: FontWeight.w500,
+-                        ),
+-                      ),
+-                      SizedBox(width: AdipsSizes.spaceBtwFontsSm),
+-                      Text(
+-                        AdipsFormatters.formatCurrency(accountBalance),
+-                        style: const TextStyle(
+-                          color: Colors.white,
+-                          fontSize: 32,
+-                          fontWeight: FontWeight.w600,
+-                        ),
++                  FittedBox(
++                    fit: BoxFit.scaleDown,
++                    alignment: Alignment.centerLeft,
++                    child: Text(
++                      AdipsFormatters.money(primary.totalBalance, primary.currency),
++                      style: const TextStyle(
++                        color: Colors.white,
++                        fontSize: 32,
++                        fontWeight: FontWeight.w600,
+                       ),
+-                    ],
++                    ),
+                   ),
++                  for (final other in others) ...[
++                    const SizedBox(height: 4),
++                    Text(
++                      '+ ${AdipsFormatters.money(other.totalBalance, other.currency)}',
++                      style: TextStyle(
++                        color: Colors.white.withOpacity(0.9),
++                        fontSize: 15,
++                        fontWeight: FontWeight.w500,
++                      ),
++                    ),
++                  ],
+                 ],
+               ),
+               Positioned(
+@@ -97,4 +115,4 @@ class AccountBalance extends StatelessWidget {
+       ),
+     );
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/lib/features/authentication/screens/homepage/widgets/account_cards.dart b/lib/features/authentication/screens/homepage/widgets/account_cards.dart
+new file mode 100644
+index 0000000..a425392
+--- /dev/null
++++ b/lib/features/authentication/screens/homepage/widgets/account_cards.dart
+@@ -0,0 +1,145 @@
++import 'package:flutter/material.dart';
++
++import '../../../../../utils/constants/adips_category_colors.dart';
++import '../../../../../utils/constants/adips_icons.dart';
++import '../../../../../utils/constants/adips_palette.dart';
++import '../../../../../utils/constants/sizes.dart';
++import '../../../../../utils/helpers/helper_functions.dart';
++import '../../../../../utils/models/account_model.dart';
++
++/// Horizontally scrolling row of account cards under the total
++/// balance: icon, name and current balance for each account.
++///
++/// An account with include_in_total = false (A13) is still listed but
++/// faded and tagged "Not in total", so the user can see why it isn't
++/// part of the number above.
++///
++/// [selectedId] / [onTap] are optional: step 1.9 uses them to filter
++/// Home by account. Until then tapping does nothing.
++class AccountCards extends StatelessWidget {
++  const AccountCards({
++    super.key,
++    required this.accounts,
++    this.selectedId,
++    this.onTap,
++  });
++
++  final List<AccountModel> accounts;
++  final int? selectedId;
++  final ValueChanged<AccountModel>? onTap;
++
++  @override
++  Widget build(BuildContext context) {
++    if (accounts.isEmpty) return const SizedBox.shrink();
++
++    return SizedBox(
++      height: 92,
++      child: ListView.separated(
++        scrollDirection: Axis.horizontal,
++        itemCount: accounts.length,
++        separatorBuilder: (_, _) => const SizedBox(width: AdipsSizes.sm),
++        itemBuilder: (context, index) {
++          final account = accounts[index];
++          return _AccountCard(
++            account: account,
++            isSelected: account.id == selectedId,
++            onTap: onTap == null ? null : () => onTap!(account),
++          );
++        },
++      ),
++    );
++  }
++}
++
++class _AccountCard extends StatelessWidget {
++  const _AccountCard({
++    required this.account,
++    required this.isSelected,
++    required this.onTap,
++  });
++
++  final AccountModel account;
++  final bool isSelected;
++  final VoidCallback? onTap;
++
++  @override
++  Widget build(BuildContext context) {
++    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
++    final surfaceColor = isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField;
++    final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
++    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
++    final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
++    final lossColor = isDark ? AdipsPalette.darkLoss : AdipsPalette.lightLoss;
++    final brandColor =
++        isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
++
++    final Color accent = AdipsCategoryColors.byId(account.colorId);
++    final bool negative = account.currentBalance < 0;
++
++    return Opacity(
++      opacity: account.includeInTotal ? 1 : 0.6,
++      child: InkWell(
++        onTap: onTap,
++        borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
++        child: Container(
++          width: 150,
++          padding: const EdgeInsets.all(AdipsSizes.sm),
++          decoration: BoxDecoration(
++            color: surfaceColor,
++            borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
++            border: Border.all(
++              color: isSelected ? brandColor : lineColor,
++              width: isSelected ? 1.5 : 1,
++            ),
++          ),
++          child: Column(
++            crossAxisAlignment: CrossAxisAlignment.start,
++            mainAxisAlignment: MainAxisAlignment.spaceBetween,
++            children: [
++              Row(
++                children: [
++                  CircleAvatar(
++                    radius: 13,
++                    backgroundColor: accent.withValues(alpha: 0.15),
++                    child: Icon(AdipsIcons.byId(account.iconId), color: accent, size: 14),
++                  ),
++                  const SizedBox(width: 8),
++                  Expanded(
++                    child: Text(
++                      account.name,
++                      maxLines: 1,
++                      overflow: TextOverflow.ellipsis,
++                      style: TextStyle(
++                        fontSize: 13,
++                        fontWeight: FontWeight.w600,
++                        color: textColor,
++                      ),
++                    ),
++                  ),
++                ],
++              ),
++              FittedBox(
++                fit: BoxFit.scaleDown,
++                alignment: Alignment.centerLeft,
++                child: Text(
++                  AdipsFormatters.money(account.currentBalance, account.currency),
++                  style: TextStyle(
++                    fontSize: 16,
++                    fontWeight: FontWeight.w700,
++                    color: negative ? lossColor : textColor,
++                  ),
++                ),
++              ),
++              Text(
++                account.includeInTotal ? AccountTypeInfo.of(account.type).label : 'Not in total',
++                maxLines: 1,
++                overflow: TextOverflow.ellipsis,
++                style: TextStyle(fontSize: 11, color: mutedColor),
++              ),
++            ],
++          ),
++        ),
++      ),
++    );
++  }
++}
+diff --git a/lib/utils/helpers/helper_functions.dart b/lib/utils/helpers/helper_functions.dart
+index 09b5e4f..d93825c 100644
+--- a/lib/utils/helpers/helper_functions.dart
++++ b/lib/utils/helpers/helper_functions.dart
+@@ -29,4 +29,29 @@ class AdipsFormatters {
+     );
+     return formatter.format(amount);
+   }
++
++  /// Symbol for a 3-letter currency code; unknown codes fall back to
++  /// the code itself ("CHF"), so nothing is ever shown wrongly as ₹.
++  static String symbolFor(String currency) {
++    switch (currency.toUpperCase()) {
++      case 'INR':
++        return '₹';
++      case 'USD':
++        return '\$';
++      case 'EUR':
++        return '€';
++      case 'GBP':
++        return '£';
++      default:
++        return currency.toUpperCase();
++    }
++  }
++
++  /// "₹1,234.50" — symbol + formatted amount for [currency].
++  static String money(double amount, String currency) {
++    final symbol = symbolFor(currency);
++    // Codes (unknown currencies) read better with a space: "CHF 10.00".
++    final sep = symbol.length > 1 ? ' ' : '';
++    return '$symbol$sep${formatCurrency(amount)}';
++  }
+ }
+\ No newline at end of file

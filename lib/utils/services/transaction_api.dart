@@ -24,12 +24,14 @@ class TransactionApi {
     int limit = 200,
     String? sortBy,
     String? order,
+    int? accountId,
   }) async {
     final query = <String, String>{
       'page': '$page',
       'limit': '$limit',
       if (sortBy != null) 'sort_by': sortBy,
       if (order != null) 'order': order,
+      if (accountId != null) 'account_id': '$accountId',
     };
     final uri = Uri(path: '/api/v1/transactions', queryParameters: query);
 
@@ -44,9 +46,25 @@ class TransactionApi {
   }
 
   /// GET /api/v1/transactions/summary
-  static Future<TransactionSummary> summary() async {
+  ///
+  /// Transfers are excluded from income/expense/count unless
+  /// [includeTransfers] is true (X7). Note `balance` in the response
+  /// is the net flow of the filtered rows, NOT an account balance —
+  /// real balances come from /accounts and /accounts/summary.
+  static Future<TransactionSummary> summary({
+    int? accountId,
+    bool includeTransfers = false,
+  }) async {
+    final query = <String, String>{
+      if (accountId != null) 'account_id': '$accountId',
+      if (includeTransfers) 'include_transfers': 'true',
+    };
+    final uri = Uri(
+      path: '/api/v1/transactions/summary',
+      queryParameters: query.isEmpty ? null : query,
+    );
     final response = await AdipsHttpHelper.get(
-      '/api/v1/transactions/summary',
+      uri.toString(),
       cookie: _cookie,
     );
     return TransactionSummary.fromJson(AdipsHttpHelper.data(response));
@@ -54,6 +72,7 @@ class TransactionApi {
 
   /// POST /api/v1/transactions
   static Future<AppTransaction> create({
+    required int accountId,
     required double amount,
     required String type,
     required String category,
@@ -69,6 +88,7 @@ class TransactionApi {
     final response = await AdipsHttpHelper.post(
       '/api/v1/transactions',
       {
+        'account_id': accountId,
         'amount': amount,
         'type': type,
         'category': category,
@@ -87,11 +107,13 @@ class TransactionApi {
   }
 
   /// PATCH /api/v1/transactions/:id
+  /// [accountId] re-checks ownership/active/currency server-side (T3).
   /// Only non-null fields are sent, matching the backend's partial
   /// UpdateTransactionRequest (pointer fields — omitted keys are left
   /// untouched server-side).
   static Future<AppTransaction> update(
       int id, {
+        int? accountId,
         double? amount,
         String? type,
         String? category,
@@ -105,6 +127,7 @@ class TransactionApi {
         DateTime? transactionDate,
       }) async {
     final body = <String, dynamic>{
+      if (accountId != null) 'account_id': accountId,
       if (amount != null) 'amount': amount,
       if (type != null) 'type': type,
       if (category != null) 'category': category,

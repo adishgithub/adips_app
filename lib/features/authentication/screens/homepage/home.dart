@@ -1,6 +1,8 @@
 import 'package:adips/common/widgets/navigation/bottom_action_bar.dart';
+import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
 import 'package:adips/features/authentication/controllers/home/home_controller.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/account_balance.dart';
+import 'package:adips/features/authentication/screens/homepage/widgets/account_cards.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/date_range_filter.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/greeting_header.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/sort_filter.dart';
@@ -24,6 +26,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final HomeController controller = HomeController.instance;
+  final AccountController accountController = AccountController.instance;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -65,7 +68,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       email: controller.email.value,
                     ),
                     SizedBox(height: AdipsSizes.spaceBtwSections),
-                    AccountBalance(accountBalance: controller.summary.value.balance),
+                    // Total comes from /accounts/summary (real balances),
+                    // NOT transactions/summary.balance, which is only the
+                    // net flow of the filtered rows.
+                    AccountBalance(totals: accountController.summary.value.totals),
+                    SizedBox(height: AdipsSizes.spaceBtwItems),
+                    AccountCards(accounts: accountController.accounts.toList()),
                     SizedBox(height: AdipsSizes.spaceBtwSections),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -90,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       totalIncome: controller.summary.value.totalCredit,
                       totalExpenses: controller.summary.value.totalDebit,
                       totalTransactions: controller.summary.value.count,
+                      currency: controller.summaryCurrency,
                     ),
                     SizedBox(height: AdipsSizes.spaceBtwItems),
                     TransactionSearchBar(

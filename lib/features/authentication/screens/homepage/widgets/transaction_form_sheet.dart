@@ -1,18 +1,20 @@
 // widgets/transaction_form_sheet.dart
 import 'package:adips/common/widgets/buttons/custom_elevated_button.dart';
 import 'package:adips/common/widgets/dropdowns/custom_dropdown.dart';
+import 'package:adips/common/widgets/pickers/account_picker_sheet.dart';
 import 'package:adips/common/widgets/pickers/category_picker_sheet.dart';
 import 'package:adips/common/widgets/text_fields/custom_picker_field.dart';
 import 'package:adips/common/widgets/text_fields/custom_text_field.dart';
-import 'package:adips/data/services/settings_service.dart';
 import 'package:adips/data/services/transaction_category_service.dart';
 import 'package:adips/data/services/transaction_type_service.dart';
+import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
 import 'package:adips/features/authentication/controllers/home/home_controller.dart';
 import 'package:adips/utils/constants/adips_category_colors.dart';
 import 'package:adips/utils/constants/adips_icons.dart';
 import 'package:adips/utils/constants/adips_palette.dart';
 import 'package:adips/utils/constants/sizes.dart';
 import 'package:adips/utils/helpers/helper_functions.dart';
+import 'package:adips/utils/models/account_model.dart';
 import 'package:adips/utils/models/app_transaction.dart';
 import 'package:adips/utils/models/transaction_category_model.dart';
 import 'package:adips/utils/models/transaction_type_model.dart';
@@ -52,7 +54,6 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
 
   final TransactionTypeService _typeService = TransactionTypeService();
   final TransactionCategoryService _categoryService = TransactionCategoryService();
-  final SettingsService _settingsService = SettingsService();
   final HomeController _controller = HomeController.instance;
 
   late final TextEditingController _amountController;
@@ -67,9 +68,16 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   late String _status; // pending | completed | failed
   late String _paymentMethod;
 
-  /// Fetched from Settings, never user-editable here — the amount is
-  /// always logged in the account's configured currency.
-  String _currency = 'INR';
+  /// The account this transaction belongs to. Null while editing a
+  /// transaction whose account is archived/unavailable (the field then
+  /// shows tx.accountName and the account is left unchanged on save).
+  AccountModel? _selectedAccount;
+
+  /// Never user-editable: a transaction always uses its account's
+  /// currency (rule T2). Falls back to the transaction's own currency
+  /// when editing one whose account is no longer selectable.
+  String get _currency =>
+      _selectedAccount?.currency ?? widget.transaction?.currency ?? 'INR';
 
   bool _loadingOptions = true;
   String? _loadError;
@@ -85,7 +93,6 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     _date = tx?.transactionDate ?? DateTime.now();
     _status = tx?.status ?? 'completed';
     _paymentMethod = _normalizePaymentMethod(tx?.paymentMethod);
-    if (tx != null) _currency = tx.currency;
     _loadOptions();
   }
 
@@ -116,7 +123,11 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     try {
       final types = await _typeService.list();
       final categories = await _categoryService.list();
-      final settings = await _settingsService.getSettings();
+
+      // HomeController normally has accounts loaded already; only fetch
+      // if they aren't (e.g. the first load failed).
+      final accountCtrl = AccountController.instance;
+      if (accountCtrl.accounts.isEmpty) await accountCtrl.load();
 
       TransactionCategoryModel? initialCategory;
       final tx = widget.transaction;
@@ -133,12 +144,17 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         initialCategory = categories.first;
       }
 
+      // New transaction: preselect the default account. Edit: the
+      // transaction's own account (null if it was archived since).
+      final AccountModel? initialAccount =
+          tx != null ? accountCtrl.byId(tx.accountId) : accountCtrl.defaultAccount;
+
       if (mounted) {
         setState(() {
           _types = types;
           _categories = categories;
           _selectedCategory = initialCategory;
-          if (tx == null) _currency = settings.currency;
+          _selectedAccount = initialAccount;
         });
       }
     } catch (e) {
@@ -193,6 +209,24 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     }
   }
 
+  Future<void> _pickAccount() async {
+    final tx = widget.transaction;
+    final all = AccountController.instance.activeAccounts;
+    // Editing: only same-currency accounts, because the currency isn't
+    // editable and the backend rejects a mismatch (T2, T3).
+    final options =
+        tx == null ? all : all.where((a) => a.currency == tx.currency).toList();
+    final picked = await showAccountPickerSheet(
+      context: context,
+      accounts: options,
+      selected: _selectedAccount,
+      emptyMessage: tx == null
+          ? 'No accounts yet — add one in Settings > Accounts.'
+          : 'No other ${tx.currency} accounts to move this to.',
+    );
+    if (picked != null) setState(() => _selectedAccount = picked);
+  }
+
   Future<void> _save() async {
     if (_selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -209,8 +243,13 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     bool ok;
 
     if (widget.isEditing) {
+      final tx = widget.transaction!;
       ok = await _controller.updateTransaction(
-        widget.transaction!.id,
+        tx.id,
+        // Only sent when the user actually moved it (T3).
+        accountId: (_selectedAccount != null && _selectedAccount!.id != tx.accountId)
+            ? _selectedAccount!.id
+            : null,
         amount: amount,
         type: direction,
         category: category.name,
@@ -225,6 +264,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
       );
     } else {
       ok = await _controller.createTransaction(
+        accountId: _selectedAccount!.id,
         amount: amount,
         type: direction,
         category: category.name,
@@ -303,7 +343,38 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         ),
         child: SafeArea(
           top: false,
-          child: _loadingOptions
+          child: widget.transaction?.isTransfer == true
+              ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.swap_horiz_rounded, size: 40, color: mutedColor),
+                const SizedBox(height: AdipsSizes.sm),
+                Text(
+                  'This is part of a transfer',
+                  style: TextStyle(
+                    fontSize: AdipsSizes.fontSizesLg,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: AdipsSizes.xs),
+                Text(
+                  'Transfers can\'t be edited as a normal transaction. '
+                  'Transfer editing is coming soon.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: mutedColor),
+                ),
+                const SizedBox(height: AdipsSizes.sm),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          )
+              : _loadingOptions
               ? const Padding(
             padding: EdgeInsets.symmetric(vertical: 60),
             child: Center(child: CircularProgressIndicator()),
@@ -354,13 +425,33 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
                     labelText: 'Amount',
                     hintText: 'e.g. 500',
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    prefixIcon: Icons.currency_rupee,
+                    prefixIcon: AdipsFormatters.iconFor(_currency),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) return 'Amount is required';
                       final parsed = double.tryParse(v.trim());
                       if (parsed == null || parsed <= 0) return 'Enter a valid amount';
                       return null;
                     },
+                  ),
+                  const SizedBox(height: AdipsSizes.spaceBtwInputFields),
+
+                  // Account — where the money comes from / goes to.
+                  // Preselected to the default account on create.
+                  CustomPickerField(
+                    labelText: 'Account',
+                    valueText: _selectedAccount?.name ?? widget.transaction?.accountName ?? '',
+                    leading: Icon(
+                      _selectedAccount != null
+                          ? AdipsIcons.byId(_selectedAccount!.iconId)
+                          : Icons.account_balance_wallet_outlined,
+                      color: _selectedAccount != null
+                          ? AdipsCategoryColors.byId(_selectedAccount!.colorId)
+                          : mutedColor,
+                    ),
+                    onTap: _pickAccount,
+                    validator: (_) => (_selectedAccount == null && !widget.isEditing)
+                        ? 'Select an account'
+                        : null,
                   ),
                   const SizedBox(height: AdipsSizes.spaceBtwInputFields),
 
@@ -430,12 +521,9 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
                   ),
                   const SizedBox(height: AdipsSizes.spaceBtwInputFields),
 
-                  // Currency is fetched from Settings (see
-                  // _loadOptions) and sent as-is on every
-                  // create/update request below. It is never
-                  // shown or editable in this form, or
-                  // anywhere else in the app — the account
-                  // has exactly one currency.
+                  // Currency comes from the selected account
+                  // (see _currency) and is sent on every
+                  // create/update. It is never editable here.
                   const SizedBox(height: AdipsSizes.spaceBtwSections),
 
                   Obx(

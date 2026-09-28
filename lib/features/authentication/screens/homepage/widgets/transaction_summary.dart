@@ -11,11 +11,15 @@ class TransactionSummary extends StatelessWidget {
     required this.totalIncome,
     required this.totalExpenses,
     required this.totalTransactions,
+    this.currency = 'INR',
   });
 
   final double totalIncome;
   final double totalExpenses;
   final int totalTransactions;
+
+  /// Currency the income/expense figures are shown in.
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +48,7 @@ class TransactionSummary extends StatelessWidget {
                 icon: Icons.trending_up_rounded,
                 iconColor: gainColor,
                 label: 'Total Income',
-                value: '₹${AdipsFormatters.formatCurrency(totalIncome)}',
+                value: AdipsFormatters.money(totalIncome, currency),
                 valueColor: gainColor,
                 mutedColor: mutedColor,
               ),
@@ -55,7 +59,7 @@ class TransactionSummary extends StatelessWidget {
                 icon: Icons.trending_down_rounded,
                 iconColor: lossColor,
                 label: 'Total Expenses',
-                value: '₹${AdipsFormatters.formatCurrency(totalExpenses)}',
+                value: AdipsFormatters.money(totalExpenses, currency),
                 valueColor: lossColor,
                 mutedColor: mutedColor,
               ),
