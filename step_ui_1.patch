@@ -1,0 +1,25 @@
+diff --git a/lib/features/authentication/screens/homepage/home.dart b/lib/features/authentication/screens/homepage/home.dart
+index 1a82a15..d285e62 100644
+--- a/lib/features/authentication/screens/homepage/home.dart
++++ b/lib/features/authentication/screens/homepage/home.dart
+@@ -111,7 +111,10 @@ class _HomeScreenState extends State<HomeScreen> {
+                               )
+                           : null,
+                     ),
+-                    SizedBox(height: AdipsSizes.spaceBtwSections),
++                    // Every gap between the blocks below (balance, account
++                    // cards, filters, summary, search) is spaceBtwItems, so
++                    // the spacing reads evenly.
++                    SizedBox(height: AdipsSizes.spaceBtwItems),
+                     Row(
+                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                       children: [
+@@ -130,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
+                         ),
+                       ],
+                     ),
+-                    SizedBox(height: AdipsSizes.spaceBtwSections),
++                    SizedBox(height: AdipsSizes.spaceBtwItems),
+                     TransactionSummary(
+                       totalIncome: controller.summary.value.totalCredit,
+                       totalExpenses: controller.summary.value.totalDebit,
