@@ -25,6 +25,16 @@ class HomeController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxBool isMutating = false.obs; // create/update/delete in flight
 
+  /// Account the Home list + income/expense strip are filtered to;
+  /// null = all accounts. The balance card and account cards always
+  /// show every account (they come from /accounts, not from this).
+  final Rx<int?> selectedAccountId = Rx<int?>(null);
+
+  /// True while a filter change is fetching, so the list can show a
+  /// thin progress bar instead of blanking the screen.
+  final RxBool isFiltering = false.obs;
+  int _filterSeq = 0; // ignore out-of-order responses from rapid taps
+
   final RxString searchQuery = ''.obs;
   final Rx<SortOption> sortOption = SortOption.newestFirst.obs;
   final Rx<DateTimeRange?> selectedRange = Rx<DateTimeRange?>(null);
@@ -75,14 +85,19 @@ class HomeController extends GetxController {
     isLoading.value = true;
     try {
       final results = await Future.wait([
-        TransactionApi.list(sortBy: 'transaction_date', order: 'desc'),
-        TransactionApi.summary(),
+        TransactionApi.list(
+          sortBy: 'transaction_date',
+          order: 'desc',
+          accountId: selectedAccountId.value,
+        ),
+        TransactionApi.summary(accountId: selectedAccountId.value),
         // Balances live on the backend; reload them with the list so
         // the two are never out of sync. Handles its own errors.
         AccountController.instance.load(),
       ]);
       transactions.assignAll(results[0] as List<AppTransaction>);
       summary.value = results[1] as TransactionSummary;
+      await _dropStaleSelection();
     } catch (e) {
       Get.snackbar(
         'Could not load data',
@@ -100,13 +115,18 @@ class HomeController extends GetxController {
   Future<void> _refreshQuietly() async {
     try {
       final results = await Future.wait([
-        TransactionApi.list(sortBy: 'transaction_date', order: 'desc'),
-        TransactionApi.summary(),
+        TransactionApi.list(
+          sortBy: 'transaction_date',
+          order: 'desc',
+          accountId: selectedAccountId.value,
+        ),
+        TransactionApi.summary(accountId: selectedAccountId.value),
         // Any create/update/delete changes account balances too.
         AccountController.instance.refreshQuietly(),
       ]);
       transactions.assignAll(results[0] as List<AppTransaction>);
       summary.value = results[1] as TransactionSummary;
+      await _dropStaleSelection();
     } catch (e) {
       Get.snackbar(
         'Could not refresh',
@@ -116,10 +136,66 @@ class HomeController extends GetxController {
     }
   }
 
-  /// Currency the income/expense strip is shown in: the default
-  /// account's (extended in step 1.9 to follow the selected account).
-  String get summaryCurrency =>
-      AccountController.instance.defaultAccount?.currency ?? 'INR';
+  /// Currency the income/expense strip is shown in: the selected
+  /// account's, or the default account's when showing all accounts.
+  String get summaryCurrency {
+    final accounts = AccountController.instance;
+    final selectedId = selectedAccountId.value;
+    final selected = selectedId == null ? null : accounts.byId(selectedId);
+    return (selected ?? accounts.defaultAccount)?.currency ?? 'INR';
+  }
+
+  /// Filters Home by account. Tapping the already-selected account,
+  /// or passing null ("All"), clears the filter. Only the list and
+  /// the income/expense summary are re-fetched: balances don't
+  /// depend on the filter.
+  Future<void> selectAccount(int? id) async {
+    final previous = selectedAccountId.value;
+    final next = id == previous ? null : id;
+    if (next == previous) return; // "All" tapped while already on All
+
+    selectedAccountId.value = next; // highlight immediately
+    final seq = ++_filterSeq;
+    isFiltering.value = true;
+    try {
+      final results = await Future.wait([
+        TransactionApi.list(
+          sortBy: 'transaction_date',
+          order: 'desc',
+          accountId: next,
+        ),
+        TransactionApi.summary(accountId: next),
+      ]);
+      if (seq != _filterSeq) return; // a newer tap superseded this one
+      transactions.assignAll(results[0] as List<AppTransaction>);
+      summary.value = results[1] as TransactionSummary;
+    } catch (e) {
+      if (seq != _filterSeq) return;
+      selectedAccountId.value = previous; // keep highlight = data shown
+      Get.snackbar(
+        'Could not filter',
+        e.toString().replaceFirst('Exception: ', ''),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      if (seq == _filterSeq) isFiltering.value = false;
+    }
+  }
+
+  /// If the filtered account no longer exists among active accounts
+  /// (archived or deleted elsewhere), go back to "All" instead of
+  /// showing an empty list for an account the user can't see.
+  Future<void> _dropStaleSelection() async {
+    final id = selectedAccountId.value;
+    if (id == null || AccountController.instance.byId(id) != null) return;
+    selectedAccountId.value = null;
+    final results = await Future.wait([
+      TransactionApi.list(sortBy: 'transaction_date', order: 'desc'),
+      TransactionApi.summary(),
+    ]);
+    transactions.assignAll(results[0] as List<AppTransaction>);
+    summary.value = results[1] as TransactionSummary;
+  }
 
   // ---- Local search / sort / date-range over the fetched list -----
 

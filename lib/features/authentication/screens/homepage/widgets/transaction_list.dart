@@ -101,7 +101,13 @@ class _TransactionTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${DateFormat('d MMM yyyy').format(item.transactionDate)} · ${item.category}',
+                    // date · category · account (account omitted if the
+                    // server sent no name).
+                    [
+                      DateFormat('d MMM yyyy').format(item.transactionDate),
+                      item.category,
+                      if (item.accountName.isNotEmpty) item.accountName,
+                    ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 12, color: mutedColor),

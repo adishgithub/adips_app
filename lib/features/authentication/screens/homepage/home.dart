@@ -73,7 +73,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     // net flow of the filtered rows.
                     AccountBalance(totals: accountController.summary.value.totals),
                     SizedBox(height: AdipsSizes.spaceBtwItems),
-                    AccountCards(accounts: accountController.accounts.toList()),
+                    // Tap a card to filter the list + summary below to
+                    // that account; tap it again or "All" to clear.
+                    AccountCards(
+                      accounts: accountController.accounts.toList(),
+                      selectedId: controller.selectedAccountId.value,
+                      onTap: (account) => controller.selectAccount(account.id),
+                      onClear: () => controller.selectAccount(null),
+                    ),
                     SizedBox(height: AdipsSizes.spaceBtwSections),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -106,6 +113,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: controller.setSearchQuery,
                     ),
                     SizedBox(height: AdipsSizes.spaceBtwItems),
+                    if (controller.isFiltering.value)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: AdipsSizes.sm),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
                     TransactionList(transactions: controller.visibleTransactions),
                     SizedBox(height: AdipsSizes.spaceBtwSections),
                   ],
