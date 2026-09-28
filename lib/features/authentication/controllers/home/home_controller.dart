@@ -1,3 +1,4 @@
+import 'package:adips/data/services/transfer_service.dart';
 import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/sort_filter.dart';
 import 'package:adips/utils/http/http_client.dart';
@@ -318,6 +319,97 @@ class HomeController extends GetxController {
     } catch (e) {
       Get.snackbar(
         'Could not save changes',
+        e.toString().replaceFirst('Exception: ', ''),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return false;
+    } finally {
+      isMutating.value = false;
+    }
+  }
+
+  // ---- Transfer mutations ---------------------------------------------
+  // A transfer is two linked rows, so unlike a normal transaction it
+  // changes two account balances at once: always refresh both the
+  // list and the accounts afterwards (_refreshQuietly does both).
+
+  final TransferService _transferService = TransferService();
+
+  Future<bool> createTransfer({
+    required int fromAccountId,
+    required int toAccountId,
+    required double amount,
+    DateTime? transactionDate,
+    String note = '',
+  }) async {
+    isMutating.value = true;
+    try {
+      await _transferService.create(
+        fromAccountId: fromAccountId,
+        toAccountId: toAccountId,
+        amount: amount,
+        transactionDate: transactionDate,
+        note: note,
+      );
+      await _refreshQuietly();
+      Get.snackbar('Transferred', 'Money moved between accounts',
+          snackPosition: SnackPosition.BOTTOM);
+      return true;
+    } catch (e) {
+      Get.snackbar(
+        'Could not transfer',
+        e.toString().replaceFirst('Exception: ', ''),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return false;
+    } finally {
+      isMutating.value = false;
+    }
+  }
+
+  Future<bool> updateTransfer(
+    String groupId, {
+    int? fromAccountId,
+    int? toAccountId,
+    double? amount,
+    DateTime? transactionDate,
+    String? note,
+  }) async {
+    isMutating.value = true;
+    try {
+      await _transferService.update(
+        groupId,
+        fromAccountId: fromAccountId,
+        toAccountId: toAccountId,
+        amount: amount,
+        transactionDate: transactionDate,
+        note: note,
+      );
+      await _refreshQuietly();
+      Get.snackbar('Saved', 'Transfer updated', snackPosition: SnackPosition.BOTTOM);
+      return true;
+    } catch (e) {
+      Get.snackbar(
+        'Could not save changes',
+        e.toString().replaceFirst('Exception: ', ''),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return false;
+    } finally {
+      isMutating.value = false;
+    }
+  }
+
+  Future<bool> deleteTransfer(String groupId) async {
+    isMutating.value = true;
+    try {
+      await _transferService.delete(groupId);
+      await _refreshQuietly();
+      Get.snackbar('Deleted', 'Transfer removed', snackPosition: SnackPosition.BOTTOM);
+      return true;
+    } catch (e) {
+      Get.snackbar(
+        'Could not delete transfer',
         e.toString().replaceFirst('Exception: ', ''),
         snackPosition: SnackPosition.BOTTOM,
       );
