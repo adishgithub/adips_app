@@ -19,11 +19,11 @@ import 'widgets/account_form_sheet.dart';
 import 'widgets/adjust_balance_sheet.dart';
 import 'widgets/delete_account_sheet.dart';
 
-enum _AccountAction { edit, adjust, archive, unarchive, delete }
+enum _AccountAction { edit, makeDefault, adjust, archive, unarchive, delete }
 
 /// Settings > Accounts: list, add, edit, archive / unarchive, delete
-/// (with merge into another account), drag-to-reorder, adjust balance,
-/// and a "Show archived" toggle.
+/// (with merge into another account), make default, drag-to-reorder,
+/// adjust balance, and a "Show archived" toggle.
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
 
@@ -256,6 +256,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
     if (refreshHome) await home.refreshQuietly();
   }
 
+  /// A5: exactly one default account; the server moves the flag.
+  Future<void> _makeDefault(AccountModel account) async {
+    try {
+      await _controller.makeDefault(account.id);
+      _snack('${account.name} is now the default account');
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   /// "My real balance is X": the sheet saves the correction itself and
   /// returns the server's result.
   Future<void> _adjust(AccountModel account) async {
@@ -277,6 +287,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
     switch (action) {
       case _AccountAction.edit:
         _openForm(account: account);
+      case _AccountAction.makeDefault:
+        _makeDefault(account);
       case _AccountAction.adjust:
         _adjust(account);
       case _AccountAction.archive:
@@ -531,6 +543,10 @@ class _AccountTile extends StatelessWidget {
                 onSelected: onAction,
                 itemBuilder: (_) => [
                   const PopupMenuItem(value: _AccountAction.edit, child: Text('Edit')),
+                  // An archived account can't become the default (A5).
+                  if (!account.isArchived && !account.isDefault)
+                    const PopupMenuItem(
+                        value: _AccountAction.makeDefault, child: Text('Make default')),
                   // Archived accounts can't take new transactions (A12).
                   if (!account.isArchived)
                     const PopupMenuItem(

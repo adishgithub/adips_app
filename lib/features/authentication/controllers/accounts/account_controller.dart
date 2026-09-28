@@ -136,6 +136,15 @@ class AccountController extends GetxController {
     }
   }
 
+  /// Makes [id] the default account (A5). The server clears the old
+  /// default in the same DB transaction, so exactly one stays default.
+  /// Archived accounts are refused (400). Does NOT catch: the server's
+  /// message is thrown for the screen to show.
+  Future<void> makeDefault(int id) async {
+    await _service.update(id, isDefault: true);
+    await refreshQuietly();
+  }
+
   /// Sets an account to the balance the user really has. A correction
   /// is a real transaction, so balances/summary are re-fetched; callers
   /// must also refresh Home when [AccountAdjustResult.changed]. Does NOT
