@@ -157,6 +157,40 @@ class AccountSummaryItem {
   }
 }
 
+/// Mirrors dto.DeletePreviewResponse (GET /accounts/:id/delete-preview):
+/// what a merge-delete WOULD do, without changing anything.
+///
+/// [movedTransactionCount] rows are re-pointed to the target and kept.
+/// Transfers between source and target ([collapsedTransferCount]) net
+/// to zero, so they disappear instead of moving. No money is created or
+/// lost: [targetBalanceAfter] == [targetBalanceBefore] +
+/// [sourceCurrentBalance].
+class AccountDeletePreview {
+  const AccountDeletePreview({
+    required this.movedTransactionCount,
+    required this.collapsedTransferCount,
+    required this.sourceCurrentBalance,
+    required this.targetBalanceBefore,
+    required this.targetBalanceAfter,
+  });
+
+  final int movedTransactionCount;
+  final int collapsedTransferCount;
+  final double sourceCurrentBalance;
+  final double targetBalanceBefore;
+  final double targetBalanceAfter;
+
+  factory AccountDeletePreview.fromJson(Map<String, dynamic> json) {
+    return AccountDeletePreview(
+      movedTransactionCount: _asInt(json['moved_transaction_count']),
+      collapsedTransferCount: _asInt(json['collapsed_transfer_count']),
+      sourceCurrentBalance: _asDouble(json['source_current_balance']),
+      targetBalanceBefore: _asDouble(json['target_balance_before']),
+      targetBalanceAfter: _asDouble(json['target_balance_after']),
+    );
+  }
+}
+
 /// The fixed list of account types the backend accepts
 /// (binding: oneof=cash bank savings business wallet other), with a
 /// label and a suggested default icon for the create form. Icon ids

@@ -105,6 +105,30 @@ class AccountController extends GetxController {
     ]);
   }
 
+  /// Read-only preview of a merge-delete. Does NOT catch: the server's
+  /// message is thrown so the sheet can show it inline.
+  Future<AccountDeletePreview> deletePreview(int id, int moveTo) =>
+      _service.deletePreview(id, moveTo: moveTo);
+
+  /// Deletes an account (optionally merging its transactions into
+  /// [moveTransactionsTo]), then refreshes balances/lists. Does NOT
+  /// catch: the 409/400 message is thrown as ApiException for the
+  /// screen to show.
+  ///
+  /// A merge changes transactions on the target, so callers must also
+  /// refresh Home (see AccountsScreen).
+  Future<void> delete(
+    int id, {
+    int? moveTransactionsTo,
+    bool refreshArchived = false,
+  }) async {
+    await _service.delete(id, moveTransactionsTo: moveTransactionsTo);
+    await Future.wait([
+      refreshQuietly(),
+      if (refreshArchived) loadArchived(),
+    ]);
+  }
+
   Future<void> _fetch() async {
     final results = await Future.wait([_service.list(), _service.summary()]);
     accounts.assignAll(results[0] as List<AccountModel>);

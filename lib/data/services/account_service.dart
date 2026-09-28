@@ -9,8 +9,8 @@ import 'package:adips/utils/models/account_model.dart';
 /// user-readable message, e.g. 409 "An account with this name already
 /// exists" (A2) — screens should show that message as-is.
 ///
-/// list/get/create/update/summary/archive/unarchive live here so far;
-/// delete, reorder and adjust are added in the rest of Phase 3.
+/// list/get/create/update/summary/archive/unarchive/delete live here so
+/// far; reorder and adjust are added in the rest of Phase 3.
 class AccountService {
   /// GET /accounts — active accounts ordered by sort_order, each with
   /// its computed current_balance. Pass [includeArchived] to also get
@@ -99,6 +99,41 @@ class AccountService {
       cookie: AdipsHttpHelper.authCookie,
     );
     return AccountModel.fromJson(AdipsHttpHelper.data(response));
+  }
+
+  /// GET /accounts/:id/delete-preview?move_to=<id> — read-only preview
+  /// of a merge-delete (A10). Show it and get a confirmation before
+  /// calling [delete] with the same target.
+  ///
+  /// Throws the server's message when the delete isn't allowed:
+  /// default account (A6) or last active account (A7) = 409; target
+  /// archived / other currency / same account = 400.
+  Future<AccountDeletePreview> deletePreview(int id, {required int moveTo}) async {
+    final response = await AdipsHttpHelper.get(
+      '${AdipsApiConstants.accountDeletePreview(id)}?move_to=$moveTo',
+      cookie: AdipsHttpHelper.authCookie,
+    );
+    return AccountDeletePreview.fromJson(AdipsHttpHelper.data(response));
+  }
+
+  /// DELETE /accounts/:id[?move_transactions_to=<id>]
+  ///
+  /// - No transactions: soft delete (A8).
+  /// - Has transactions and no [moveTransactionsTo]: 409 (A9).
+  /// - [moveTransactionsTo] given: merge-delete (A10) — the transactions
+  ///   and the opening balance move to the target, transfers between the
+  ///   two are removed. The target must be active and use the same
+  ///   currency.
+  /// - Default account (A6) and last active account (A7): 409.
+  ///
+  /// The response has no `data`, so nothing is returned.
+  Future<void> delete(int id, {int? moveTransactionsTo}) async {
+    final query =
+        moveTransactionsTo != null ? '?move_transactions_to=$moveTransactionsTo' : '';
+    await AdipsHttpHelper.delete(
+      '${AdipsApiConstants.account(id)}$query',
+      cookie: AdipsHttpHelper.authCookie,
+    );
   }
 
   /// PATCH /accounts/:id — only non-null fields are sent, matching the

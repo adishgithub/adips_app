@@ -139,6 +139,10 @@ class HomeController extends GetxController {
     }
   }
 
+  /// Public entry point for other screens that change transactions
+  /// behind Home's back (e.g. a merge-delete of an account).
+  Future<void> refreshQuietly() => _refreshQuietly();
+
   /// Currency the income/expense strip is shown in: the selected
   /// account's, or the default account's when showing all accounts.
   String get summaryCurrency {

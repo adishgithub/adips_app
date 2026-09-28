@@ -11,16 +11,18 @@ import '../../../../utils/constants/sizes.dart';
 import '../../../../utils/helpers/helper_functions.dart';
 import '../../../../utils/http/http_client.dart';
 import '../../../../utils/models/account_model.dart';
+import '../../../../utils/services/transaction_api.dart';
 import '../../../authentication/controllers/accounts/account_controller.dart';
 import '../../../authentication/controllers/home/home_controller.dart';
 import '../../../authentication/screens/homepage/widgets/transfer_form_sheet.dart';
 import 'widgets/account_form_sheet.dart';
+import 'widgets/delete_account_sheet.dart';
 
-enum _AccountAction { edit, archive, unarchive }
+enum _AccountAction { edit, archive, unarchive, delete }
 
-/// Settings > Accounts: list, add, edit, archive / unarchive, and a
-/// "Show archived" toggle. Delete / reorder / adjust arrive in the
-/// rest of Phase 3.
+/// Settings > Accounts: list, add, edit, archive / unarchive, delete
+/// (with merge into another account), and a "Show archived" toggle.
+/// Reorder / adjust arrive in the rest of Phase 3.
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
 
@@ -136,6 +138,112 @@ class _AccountsScreenState extends State<AccountsScreen> {
     }
   }
 
+  /// Delete entry point. What happens depends on the account:
+  ///  - default account (A6): refused up front;
+  ///  - no transactions (A8): simple confirm, then soft delete;
+  ///  - has transactions (A9/A10): pick a same-currency active account
+  ///    to merge into, see the server's preview, confirm.
+  Future<void> _delete(AccountModel account) async {
+    // The server refuses this too (A6); saying so now spares the user
+    // a dialog that can only end in an error.
+    if (account.isDefault) {
+      _snack('Set another default account first');
+      return;
+    }
+
+    // One-row list call just to learn whether the account has history.
+    final bool hasTransactions;
+    try {
+      final rows = await TransactionApi.list(accountId: account.id, limit: 1);
+      hasTransactions = rows.isNotEmpty;
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''));
+      return;
+    }
+    if (!mounted) return;
+
+    if (hasTransactions) {
+      await _mergeDelete(account);
+    } else {
+      await _plainDelete(account);
+    }
+  }
+
+  /// A8: nothing to keep, so a plain confirm is enough.
+  Future<void> _plainDelete(AccountModel account) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${account.name}?'),
+        content: const Text('It has no transactions. This can\'t be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _controller.delete(account.id, refreshArchived: _showArchived);
+      await _afterDelete(account, transactionsMoved: false);
+      _snack('${account.name} deleted');
+    } catch (e) {
+      // Server message as-is (A6, A7, or A9 if history appeared since).
+      _snack(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  /// A9/A10: an account with history can only be deleted by moving its
+  /// transactions into another active account of the same currency.
+  Future<void> _mergeDelete(AccountModel account) async {
+    final targets = _controller.activeAccounts
+        .where((a) =>
+            a.id != account.id &&
+            a.currency.toUpperCase() == account.currency.toUpperCase())
+        .toList();
+    if (targets.isEmpty) {
+      _snack(
+        '${account.name} has transactions and there is no other active '
+        '${account.currency} account to move them to. Archive it instead, '
+        'or add another ${account.currency} account first.',
+      );
+      return;
+    }
+
+    final targetId = await showDeleteAccountSheet(
+      context,
+      account: account,
+      targets: targets,
+    );
+    if (targetId == null || !mounted) return;
+
+    try {
+      await _controller.delete(
+        account.id,
+        moveTransactionsTo: targetId,
+        refreshArchived: _showArchived,
+      );
+      await _afterDelete(account, transactionsMoved: true);
+      _snack('${account.name} deleted, transactions moved');
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  /// Home caches transactions, so bring it back in line: a merge moves
+  /// (and can remove) rows, and a Home filtered to the deleted account
+  /// must fall back to "All" before it re-fetches.
+  Future<void> _afterDelete(AccountModel account, {required bool transactionsMoved}) async {
+    final home = HomeController.instance;
+    var refreshHome = transactionsMoved;
+    if (home.selectedAccountId.value == account.id) {
+      home.selectedAccountId.value = null;
+      refreshHome = true;
+    }
+    if (refreshHome) await home.refreshQuietly();
+  }
+
   void _onAction(_AccountAction action, AccountModel account) {
     switch (action) {
       case _AccountAction.edit:
@@ -144,6 +252,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
         _archive(account);
       case _AccountAction.unarchive:
         _unarchive(account);
+      case _AccountAction.delete:
+        _delete(account);
     }
   }
 
@@ -362,6 +472,10 @@ class _AccountTile extends StatelessWidget {
                   else
                     const PopupMenuItem(
                         value: _AccountAction.archive, child: Text('Archive')),
+                  PopupMenuItem(
+                    value: _AccountAction.delete,
+                    child: Text('Delete', style: TextStyle(color: lossColor)),
+                  ),
                 ],
               ),
             ],
