@@ -2,11 +2,11 @@ import 'package:adips/common/widgets/navigation/bottom_action_bar.dart';
 import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
 import 'package:adips/features/authentication/controllers/home/home_controller.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/account_balance.dart';
+import 'package:adips/features/authentication/screens/homepage/widgets/add_chooser_sheet.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/account_cards.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/date_range_filter.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/greeting_header.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/sort_filter.dart';
-import 'package:adips/features/authentication/screens/homepage/widgets/transaction_form_sheet.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/transaction_list.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/transaction_search_bar.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/transaction_summary.dart';
@@ -128,7 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       bottomNavigationBar: BottomActionBar(
-        onAddTap: () => showTransactionFormSheet(context),
+        // Asks Transaction vs Transfer first (see add_chooser_sheet).
+        onAddTap: () => showAddChooserSheet(context),
         onSettingsTap: () => Get.toNamed(
           '/settings',
           arguments: {

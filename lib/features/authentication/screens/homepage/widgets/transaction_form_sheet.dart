@@ -140,8 +140,10 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
         // initialCategory null — the field falls back to showing
         // tx.category / tx.categoryIconId directly (see build()), and
         // the user can explicitly pick a replacement category.
-      } else if (categories.isNotEmpty) {
-        initialCategory = categories.first;
+      } else {
+        // Never preselect a transfer category (G6).
+        final pickable = _withoutTransfers(types, categories);
+        if (pickable.isNotEmpty) initialCategory = pickable.first;
       }
 
       // New transaction: preselect the default account. Edit: the
@@ -164,6 +166,27 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
     }
   }
 
+  /// G6: a normal transaction must never be created as a "transfer".
+  /// Real transfers go through the Transfer sheet (two linked legs),
+  /// so the Transfer type and its categories (e.g. "Wallet Transfer")
+  /// are hidden from this form's category picker. [_types] and
+  /// [_categories] stay unfiltered so an existing row that already
+  /// uses one still resolves its category and direction.
+  static bool _isTransferType(TransactionTypeModel t) =>
+      t.name.trim().toLowerCase() == 'transfer';
+
+  static List<TransactionCategoryModel> _withoutTransfers(
+    List<TransactionTypeModel> types,
+    List<TransactionCategoryModel> categories,
+  ) {
+    final transferTypeIds = types.where(_isTransferType).map((t) => t.id).toSet();
+    return categories
+        .where((c) =>
+            !transferTypeIds.contains(c.transactionTypeId) &&
+            c.name.trim().toLowerCase() != 'wallet transfer')
+        .toList();
+  }
+
   /// The backend's Transaction.Type is a credit/debit *direction*,
   /// separate from the per-user Income/Expense/Transfer TransactionType
   /// resource managed in Settings. Income maps to a credit; every
@@ -178,8 +201,8 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
   Future<void> _pickCategory() async {
     final picked = await showCategoryPickerSheet(
       context: context,
-      types: _types,
-      categories: _categories,
+      types: _types.where((t) => !_isTransferType(t)).toList(),
+      categories: _withoutTransfers(_types, _categories),
       selected: _selectedCategory,
     );
     if (picked != null) setState(() => _selectedCategory = picked);
