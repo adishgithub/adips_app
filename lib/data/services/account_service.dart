@@ -9,8 +9,8 @@ import 'package:adips/utils/models/account_model.dart';
 /// user-readable message, e.g. 409 "An account with this name already
 /// exists" (A2) — screens should show that message as-is.
 ///
-/// list/get/create/update/summary/archive/unarchive/delete/reorder live
-/// here so far; adjust is added in the rest of Phase 3.
+/// Every accounts endpoint lives here: list/get/create/update/summary,
+/// archive/unarchive, delete (+preview), reorder and adjust.
 class AccountService {
   /// GET /accounts — active accounts ordered by sort_order, each with
   /// its computed current_balance. Pass [includeArchived] to also get
@@ -145,6 +145,25 @@ class AccountService {
       {'items': items},
       cookie: AdipsHttpHelper.authCookie,
     );
+  }
+
+  /// POST /accounts/:id/adjust — "my real balance is [actualBalance]".
+  ///
+  /// The backend records ONE completed credit or debit ("Balance
+  /// Adjustment", dated now) for the difference, or nothing if the
+  /// balance is already right (difference 0). Negative balances are
+  /// allowed. Archived accounts can't be adjusted (400).
+  Future<AccountAdjustResult> adjust(
+    int id, {
+    required double actualBalance,
+    String note = '',
+  }) async {
+    final response = await AdipsHttpHelper.post(
+      AdipsApiConstants.accountAdjust(id),
+      {'actual_balance': actualBalance, 'note': note},
+      cookie: AdipsHttpHelper.authCookie,
+    );
+    return AccountAdjustResult.fromJson(AdipsHttpHelper.data(response));
   }
 
   /// PATCH /accounts/:id — only non-null fields are sent, matching the

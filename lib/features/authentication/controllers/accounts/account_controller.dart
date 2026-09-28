@@ -136,6 +136,20 @@ class AccountController extends GetxController {
     }
   }
 
+  /// Sets an account to the balance the user really has. A correction
+  /// is a real transaction, so balances/summary are re-fetched; callers
+  /// must also refresh Home when [AccountAdjustResult.changed]. Does NOT
+  /// catch: the server's message is thrown for the sheet to show.
+  Future<AccountAdjustResult> adjust(
+    int id, {
+    required double actualBalance,
+    String note = '',
+  }) async {
+    final result = await _service.adjust(id, actualBalance: actualBalance, note: note);
+    await refreshQuietly();
+    return result;
+  }
+
   /// Read-only preview of a merge-delete. Does NOT catch: the server's
   /// message is thrown so the sheet can show it inline.
   Future<AccountDeletePreview> deletePreview(int id, int moveTo) =>

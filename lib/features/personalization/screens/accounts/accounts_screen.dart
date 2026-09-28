@@ -16,13 +16,14 @@ import '../../../authentication/controllers/accounts/account_controller.dart';
 import '../../../authentication/controllers/home/home_controller.dart';
 import '../../../authentication/screens/homepage/widgets/transfer_form_sheet.dart';
 import 'widgets/account_form_sheet.dart';
+import 'widgets/adjust_balance_sheet.dart';
 import 'widgets/delete_account_sheet.dart';
 
-enum _AccountAction { edit, archive, unarchive, delete }
+enum _AccountAction { edit, adjust, archive, unarchive, delete }
 
 /// Settings > Accounts: list, add, edit, archive / unarchive, delete
-/// (with merge into another account), drag-to-reorder, and a "Show
-/// archived" toggle. Adjust arrives in the rest of Phase 3.
+/// (with merge into another account), drag-to-reorder, adjust balance,
+/// and a "Show archived" toggle.
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
 
@@ -255,10 +256,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
     if (refreshHome) await home.refreshQuietly();
   }
 
+  /// "My real balance is X": the sheet saves the correction itself and
+  /// returns the server's result.
+  Future<void> _adjust(AccountModel account) async {
+    final result = await showAdjustBalanceSheet(context, account: account);
+    if (result == null || !mounted) return;
+
+    if (!result.changed) {
+      _snack('${account.name} already matches — nothing to adjust');
+      return;
+    }
+    // The correction is a real transaction: Home's list and summary
+    // must pick it up (balances were already refreshed by the controller).
+    await HomeController.instance.refreshQuietly();
+    final amount = AdipsFormatters.money(result.difference.abs(), account.currency);
+    _snack('${account.name} adjusted (${result.difference > 0 ? '+' : '-'}$amount)');
+  }
+
   void _onAction(_AccountAction action, AccountModel account) {
     switch (action) {
       case _AccountAction.edit:
         _openForm(account: account);
+      case _AccountAction.adjust:
+        _adjust(account);
       case _AccountAction.archive:
         _archive(account);
       case _AccountAction.unarchive:
@@ -511,6 +531,10 @@ class _AccountTile extends StatelessWidget {
                 onSelected: onAction,
                 itemBuilder: (_) => [
                   const PopupMenuItem(value: _AccountAction.edit, child: Text('Edit')),
+                  // Archived accounts can't take new transactions (A12).
+                  if (!account.isArchived)
+                    const PopupMenuItem(
+                        value: _AccountAction.adjust, child: Text('Adjust balance')),
                   if (account.isArchived)
                     const PopupMenuItem(
                         value: _AccountAction.unarchive, child: Text('Unarchive'))

@@ -1,0 +1,419 @@
+diff --git a/lib/data/services/account_service.dart b/lib/data/services/account_service.dart
+index 7122244..39aa3d6 100644
+--- a/lib/data/services/account_service.dart
++++ b/lib/data/services/account_service.dart
+@@ -9,8 +9,8 @@ import 'package:adips/utils/models/account_model.dart';
+ /// user-readable message, e.g. 409 "An account with this name already
+ /// exists" (A2) — screens should show that message as-is.
+ ///
+-/// list/get/create/update/summary/archive/unarchive/delete/reorder live
+-/// here so far; adjust is added in the rest of Phase 3.
++/// Every accounts endpoint lives here: list/get/create/update/summary,
++/// archive/unarchive, delete (+preview), reorder and adjust.
+ class AccountService {
+   /// GET /accounts — active accounts ordered by sort_order, each with
+   /// its computed current_balance. Pass [includeArchived] to also get
+@@ -147,6 +147,25 @@ class AccountService {
+     );
+   }
+ 
++  /// POST /accounts/:id/adjust — "my real balance is [actualBalance]".
++  ///
++  /// The backend records ONE completed credit or debit ("Balance
++  /// Adjustment", dated now) for the difference, or nothing if the
++  /// balance is already right (difference 0). Negative balances are
++  /// allowed. Archived accounts can't be adjusted (400).
++  Future<AccountAdjustResult> adjust(
++    int id, {
++    required double actualBalance,
++    String note = '',
++  }) async {
++    final response = await AdipsHttpHelper.post(
++      AdipsApiConstants.accountAdjust(id),
++      {'actual_balance': actualBalance, 'note': note},
++      cookie: AdipsHttpHelper.authCookie,
++    );
++    return AccountAdjustResult.fromJson(AdipsHttpHelper.data(response));
++  }
++
+   /// PATCH /accounts/:id — only non-null fields are sent, matching the
+   /// backend's pointer-field UpdateAccountRequest (omitted = untouched).
+   ///
+diff --git a/lib/features/authentication/controllers/accounts/account_controller.dart b/lib/features/authentication/controllers/accounts/account_controller.dart
+index 7dc2d4e..781aa4f 100644
+--- a/lib/features/authentication/controllers/accounts/account_controller.dart
++++ b/lib/features/authentication/controllers/accounts/account_controller.dart
+@@ -136,6 +136,20 @@ class AccountController extends GetxController {
+     }
+   }
+ 
++  /// Sets an account to the balance the user really has. A correction
++  /// is a real transaction, so balances/summary are re-fetched; callers
++  /// must also refresh Home when [AccountAdjustResult.changed]. Does NOT
++  /// catch: the server's message is thrown for the sheet to show.
++  Future<AccountAdjustResult> adjust(
++    int id, {
++    required double actualBalance,
++    String note = '',
++  }) async {
++    final result = await _service.adjust(id, actualBalance: actualBalance, note: note);
++    await refreshQuietly();
++    return result;
++  }
++
+   /// Read-only preview of a merge-delete. Does NOT catch: the server's
+   /// message is thrown so the sheet can show it inline.
+   Future<AccountDeletePreview> deletePreview(int id, int moveTo) =>
+diff --git a/lib/features/personalization/screens/accounts/accounts_screen.dart b/lib/features/personalization/screens/accounts/accounts_screen.dart
+index b2914eb..550d6bd 100644
+--- a/lib/features/personalization/screens/accounts/accounts_screen.dart
++++ b/lib/features/personalization/screens/accounts/accounts_screen.dart
+@@ -16,13 +16,14 @@ import '../../../authentication/controllers/accounts/account_controller.dart';
+ import '../../../authentication/controllers/home/home_controller.dart';
+ import '../../../authentication/screens/homepage/widgets/transfer_form_sheet.dart';
+ import 'widgets/account_form_sheet.dart';
++import 'widgets/adjust_balance_sheet.dart';
+ import 'widgets/delete_account_sheet.dart';
+ 
+-enum _AccountAction { edit, archive, unarchive, delete }
++enum _AccountAction { edit, adjust, archive, unarchive, delete }
+ 
+ /// Settings > Accounts: list, add, edit, archive / unarchive, delete
+-/// (with merge into another account), drag-to-reorder, and a "Show
+-/// archived" toggle. Adjust arrives in the rest of Phase 3.
++/// (with merge into another account), drag-to-reorder, adjust balance,
++/// and a "Show archived" toggle.
+ class AccountsScreen extends StatefulWidget {
+   const AccountsScreen({super.key});
+ 
+@@ -255,10 +256,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
+     if (refreshHome) await home.refreshQuietly();
+   }
+ 
++  /// "My real balance is X": the sheet saves the correction itself and
++  /// returns the server's result.
++  Future<void> _adjust(AccountModel account) async {
++    final result = await showAdjustBalanceSheet(context, account: account);
++    if (result == null || !mounted) return;
++
++    if (!result.changed) {
++      _snack('${account.name} already matches — nothing to adjust');
++      return;
++    }
++    // The correction is a real transaction: Home's list and summary
++    // must pick it up (balances were already refreshed by the controller).
++    await HomeController.instance.refreshQuietly();
++    final amount = AdipsFormatters.money(result.difference.abs(), account.currency);
++    _snack('${account.name} adjusted (${result.difference > 0 ? '+' : '-'}$amount)');
++  }
++
+   void _onAction(_AccountAction action, AccountModel account) {
+     switch (action) {
+       case _AccountAction.edit:
+         _openForm(account: account);
++      case _AccountAction.adjust:
++        _adjust(account);
+       case _AccountAction.archive:
+         _archive(account);
+       case _AccountAction.unarchive:
+@@ -511,6 +531,10 @@ class _AccountTile extends StatelessWidget {
+                 onSelected: onAction,
+                 itemBuilder: (_) => [
+                   const PopupMenuItem(value: _AccountAction.edit, child: Text('Edit')),
++                  // Archived accounts can't take new transactions (A12).
++                  if (!account.isArchived)
++                    const PopupMenuItem(
++                        value: _AccountAction.adjust, child: Text('Adjust balance')),
+                   if (account.isArchived)
+                     const PopupMenuItem(
+                         value: _AccountAction.unarchive, child: Text('Unarchive'))
+diff --git a/lib/features/personalization/screens/accounts/widgets/adjust_balance_sheet.dart b/lib/features/personalization/screens/accounts/widgets/adjust_balance_sheet.dart
+new file mode 100644
+index 0000000..5b02038
+--- /dev/null
++++ b/lib/features/personalization/screens/accounts/widgets/adjust_balance_sheet.dart
+@@ -0,0 +1,233 @@
++// widgets/adjust_balance_sheet.dart
++import 'package:adips/common/widgets/buttons/custom_elevated_button.dart';
++import 'package:adips/common/widgets/text_fields/custom_text_field.dart';
++import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
++import 'package:adips/utils/constants/adips_palette.dart';
++import 'package:adips/utils/constants/sizes.dart';
++import 'package:adips/utils/helpers/helper_functions.dart';
++import 'package:adips/utils/models/account_model.dart';
++import 'package:flutter/material.dart';
++
++/// Opens the "Adjust balance" sheet: the user types the balance they
++/// really see in their bank / wallet, and the server records one
++/// correcting credit or debit for the difference (section 8.6).
++///
++/// Returns the server's result once the adjustment is saved (check
++/// [AccountAdjustResult.changed] — it's false when the balance already
++/// matched), or null if the user cancels.
++Future<AccountAdjustResult?> showAdjustBalanceSheet(
++  BuildContext context, {
++  required AccountModel account,
++}) {
++  return showModalBottomSheet<AccountAdjustResult>(
++    context: context,
++    isScrollControlled: true,
++    backgroundColor: Colors.transparent,
++    builder: (_) => AdjustBalanceSheet(account: account),
++  );
++}
++
++class AdjustBalanceSheet extends StatefulWidget {
++  const AdjustBalanceSheet({super.key, required this.account});
++
++  final AccountModel account;
++
++  @override
++  State<AdjustBalanceSheet> createState() => _AdjustBalanceSheetState();
++}
++
++class _AdjustBalanceSheetState extends State<AdjustBalanceSheet> {
++  // Same bound as the backend (numeric(14,2) headroom).
++  static const double _maxAbs = 999999999999;
++
++  final _formKey = GlobalKey<FormState>();
++  late final TextEditingController _balanceController;
++  final TextEditingController _noteController = TextEditingController();
++
++  bool _saving = false;
++  String? _error;
++
++  @override
++  void initState() {
++    super.initState();
++    _balanceController = TextEditingController(
++      text: widget.account.currentBalance.toStringAsFixed(2),
++    );
++    // Rebuild on every keystroke so the "difference" line stays live.
++    _balanceController.addListener(() => setState(() {}));
++  }
++
++  @override
++  void dispose() {
++    _balanceController.dispose();
++    _noteController.dispose();
++    super.dispose();
++  }
++
++  double? get _actual => double.tryParse(_balanceController.text.trim());
++
++  /// actual - calculated, rounded to cents like the server does.
++  double? get _difference {
++    final actual = _actual;
++    if (actual == null) return null;
++    return ((actual - widget.account.currentBalance) * 100).roundToDouble() / 100;
++  }
++
++  Future<void> _save() async {
++    if (!_formKey.currentState!.validate()) return;
++    final actual = _actual;
++    if (actual == null) return;
++
++    setState(() {
++      _saving = true;
++      _error = null;
++    });
++    try {
++      final result = await AccountController.instance.adjust(
++        widget.account.id,
++        actualBalance: actual,
++        note: _noteController.text.trim(),
++      );
++      if (mounted) Navigator.of(context).pop(result);
++    } catch (e) {
++      if (mounted) {
++        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
++      }
++    } finally {
++      if (mounted) setState(() => _saving = false);
++    }
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
++    final surfaceColor = isDark ? AdipsPalette.darkBackground : AdipsPalette.lightBackground;
++    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
++    final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
++    final lossColor = isDark ? AdipsPalette.darkLoss : AdipsPalette.lightLoss;
++
++    final account = widget.account;
++    final diff = _difference;
++
++    String hint;
++    if (diff == null) {
++      hint = '';
++    } else if (diff == 0) {
++      hint = 'Matches the calculated balance — nothing will be recorded.';
++    } else {
++      final kind = diff > 0 ? 'credit' : 'debit';
++      hint = 'A $kind of ${AdipsFormatters.money(diff.abs(), account.currency)} will be '
++          'recorded as "Balance Adjustment".';
++    }
++
++    return Padding(
++      // Keeps the sheet above the keyboard.
++      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
++      child: Container(
++        decoration: BoxDecoration(
++          color: surfaceColor,
++          borderRadius:
++              const BorderRadius.vertical(top: Radius.circular(AdipsSizes.cardRadiusLg)),
++        ),
++        padding: const EdgeInsets.fromLTRB(
++          AdipsSizes.defaultSpace,
++          AdipsSizes.sm,
++          AdipsSizes.defaultSpace,
++          AdipsSizes.defaultSpace,
++        ),
++        child: SafeArea(
++          top: false,
++          child: SingleChildScrollView(
++            child: Form(
++              key: _formKey,
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.stretch,
++                mainAxisSize: MainAxisSize.min,
++                children: [
++                  Center(
++                    child: Container(
++                      width: 40,
++                      height: 4,
++                      margin: const EdgeInsets.only(bottom: AdipsSizes.spaceBtwItems),
++                      decoration: BoxDecoration(
++                        color: textColor.withOpacity(0.2),
++                        borderRadius: BorderRadius.circular(4),
++                      ),
++                    ),
++                  ),
++                  Text(
++                    'Adjust ${account.name}',
++                    style: TextStyle(
++                      fontSize: AdipsSizes.fontSizesXxl,
++                      fontWeight: FontWeight.bold,
++                      color: textColor,
++                    ),
++                  ),
++                  const SizedBox(height: AdipsSizes.sm),
++                  Text(
++                    'Calculated balance: '
++                    '${AdipsFormatters.money(account.currentBalance, account.currency)}. '
++                    'Enter what you actually have and the difference is recorded '
++                    'as one correcting transaction.',
++                    style: TextStyle(color: mutedColor),
++                  ),
++                  const SizedBox(height: AdipsSizes.spaceBtwSections),
++
++                  CustomTextField(
++                    controller: _balanceController,
++                    labelText: 'Actual balance',
++                    hintText: '0.00',
++                    prefixIcon: Icons.account_balance_wallet_outlined,
++                    // Signed: a negative balance is allowed (D5).
++                    keyboardType:
++                        const TextInputType.numberWithOptions(decimal: true, signed: true),
++                    validator: (value) {
++                      final v = double.tryParse((value ?? '').trim());
++                      if (v == null) return 'Enter a valid amount';
++                      if (v.abs() > _maxAbs) return 'Amount is too large';
++                      return null;
++                    },
++                  ),
++                  if (hint.isNotEmpty) ...[
++                    const SizedBox(height: AdipsSizes.xs),
++                    Text(
++                      hint,
++                      style: TextStyle(
++                        color: mutedColor,
++                        fontSize: AdipsSizes.fontSizesSm,
++                      ),
++                    ),
++                  ],
++                  const SizedBox(height: AdipsSizes.spaceBtwInputFields),
++
++                  CustomTextField(
++                    controller: _noteController,
++                    labelText: 'Note (optional)',
++                    hintText: 'e.g. Bank statement, 30 Sep',
++                  ),
++
++                  if (_error != null) ...[
++                    const SizedBox(height: AdipsSizes.sm),
++                    Text(_error!, style: TextStyle(color: lossColor)),
++                  ],
++                  const SizedBox(height: AdipsSizes.spaceBtwSections),
++
++                  CustomButton(
++                    text: 'Adjust balance',
++                    isLoading: _saving,
++                    onPressed: _save,
++                  ),
++                  const SizedBox(height: AdipsSizes.xs),
++                  TextButton(
++                    onPressed: _saving ? null : () => Navigator.of(context).pop(),
++                    child: const Text('Cancel'),
++                  ),
++                ],
++              ),
++            ),
++          ),
++        ),
++      ),
++    );
++  }
++}
+diff --git a/lib/utils/models/account_model.dart b/lib/utils/models/account_model.dart
+index dbf1232..6a4de04 100644
+--- a/lib/utils/models/account_model.dart
++++ b/lib/utils/models/account_model.dart
+@@ -4,6 +4,8 @@
+ // dto.AccountSummaryResponse. Parsing is tolerant (same style as
+ // AppTransaction) so a missing/odd field never crashes a screen.
+ 
++import 'app_transaction.dart';
++
+ /// One of the user's accounts (cash, bank, savings...).
+ ///
+ /// [currentBalance] is computed by the backend (opening balance +
+@@ -191,6 +193,37 @@ class AccountDeletePreview {
+   }
+ }
+ 
++/// Mirrors dto.AdjustAccountResponse (POST /accounts/:id/adjust).
++///
++/// [difference] is actual - calculated balance: positive = a credit was
++/// recorded, negative = a debit. 0 means the balance already matched
++/// and nothing was written ([adjustment] is null then).
++class AccountAdjustResult {
++  const AccountAdjustResult({
++    required this.account,
++    required this.difference,
++    this.adjustment,
++  });
++
++  final AccountModel account;
++  final double difference;
++
++  /// The "Balance Adjustment" transaction, when one was created.
++  final AppTransaction? adjustment;
++
++  bool get changed => adjustment != null;
++
++  factory AccountAdjustResult.fromJson(Map<String, dynamic> json) {
++    final adj = json['adjustment'];
++    return AccountAdjustResult(
++      account: AccountModel.fromJson(
++          (json['account'] as Map<String, dynamic>?) ?? <String, dynamic>{}),
++      difference: _asDouble(json['difference']),
++      adjustment: adj is Map<String, dynamic> ? AppTransaction.fromJson(adj) : null,
++    );
++  }
++}
++
+ /// The fixed list of account types the backend accepts
+ /// (binding: oneof=cash bank savings business wallet other), with a
+ /// label and a suggested default icon for the create form. Icon ids

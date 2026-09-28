@@ -4,6 +4,8 @@
 // dto.AccountSummaryResponse. Parsing is tolerant (same style as
 // AppTransaction) so a missing/odd field never crashes a screen.
 
+import 'app_transaction.dart';
+
 /// One of the user's accounts (cash, bank, savings...).
 ///
 /// [currentBalance] is computed by the backend (opening balance +
@@ -187,6 +189,37 @@ class AccountDeletePreview {
       sourceCurrentBalance: _asDouble(json['source_current_balance']),
       targetBalanceBefore: _asDouble(json['target_balance_before']),
       targetBalanceAfter: _asDouble(json['target_balance_after']),
+    );
+  }
+}
+
+/// Mirrors dto.AdjustAccountResponse (POST /accounts/:id/adjust).
+///
+/// [difference] is actual - calculated balance: positive = a credit was
+/// recorded, negative = a debit. 0 means the balance already matched
+/// and nothing was written ([adjustment] is null then).
+class AccountAdjustResult {
+  const AccountAdjustResult({
+    required this.account,
+    required this.difference,
+    this.adjustment,
+  });
+
+  final AccountModel account;
+  final double difference;
+
+  /// The "Balance Adjustment" transaction, when one was created.
+  final AppTransaction? adjustment;
+
+  bool get changed => adjustment != null;
+
+  factory AccountAdjustResult.fromJson(Map<String, dynamic> json) {
+    final adj = json['adjustment'];
+    return AccountAdjustResult(
+      account: AccountModel.fromJson(
+          (json['account'] as Map<String, dynamic>?) ?? <String, dynamic>{}),
+      difference: _asDouble(json['difference']),
+      adjustment: adj is Map<String, dynamic> ? AppTransaction.fromJson(adj) : null,
     );
   }
 }
