@@ -28,6 +28,11 @@ class HomeController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxBool isMutating = false.obs; // create/update/delete in flight
 
+  /// Readable message when the last full [loadAll] failed (offline,
+  /// timeout, server error), null when it worked. Home shows a Retry
+  /// state from this instead of a misleading empty screen (W.1).
+  final RxnString loadError = RxnString();
+
   /// Account the Home list + income/expense strip are filtered to;
   /// null = all accounts. The balance card and account cards always
   /// show every account (they come from /accounts, not from this).
@@ -83,30 +88,50 @@ class HomeController extends GetxController {
   }
 
   /// Fetches the transaction list + summary together. Used on first
-  /// load and pull-to-refresh.
+  /// load, pull-to-refresh and the Retry button.
+  ///
+  /// Uses the longer cold-start timeout (Q6): the free Render server
+  /// sleeps when idle and the first request can take 20-30s to wake
+  /// it. Normal calls (create/update/delete, quiet refreshes) keep
+  /// the 15s default.
   Future<void> loadAll() async {
     isLoading.value = true;
+    loadError.value = null;
     try {
+      const timeout = AdipsHttpHelper.coldStartTimeout;
       final results = await Future.wait([
         TransactionApi.list(
           sortBy: 'transaction_date',
           order: 'desc',
           accountId: selectedAccountId.value,
+          timeout: timeout,
         ),
-        TransactionApi.summary(accountId: selectedAccountId.value),
+        TransactionApi.summary(
+          accountId: selectedAccountId.value,
+          timeout: timeout,
+        ),
         // Balances live on the backend; reload them with the list so
-        // the two are never out of sync. Handles its own errors.
-        AccountController.instance.load(),
+        // the two are never out of sync. Handles its own errors and
+        // records them in AccountController.loadError.
+        AccountController.instance.load(timeout: timeout),
       ]);
       transactions.assignAll(results[0] as List<AppTransaction>);
       summary.value = results[1] as TransactionSummary;
-      await _dropStaleSelection();
+      // The accounts call swallows its own errors, so surface its
+      // failure here: a balance of 0.00 with no account cards must not
+      // pass for a successful load.
+      loadError.value = AccountController.instance.loadError.value;
+      // Only judge the filter when accounts really loaded: an empty
+      // list after a failed call would wrongly clear a valid filter.
+      if (loadError.value == null) await _dropStaleSelection();
     } catch (e) {
-      Get.snackbar(
-        'Could not load data',
-        e.toString().replaceFirst('Exception: ', ''),
-        snackPosition: SnackPosition.BOTTOM,
-      );
+      final message = e.toString().replaceFirst('Exception: ', '');
+      loadError.value = message;
+      // With nothing on screen the Retry state says it; a snackbar
+      // only helps when older data is still showing.
+      if (transactions.isNotEmpty) {
+        Get.snackbar('Could not load data', message, snackPosition: SnackPosition.BOTTOM);
+      }
     } finally {
       isLoading.value = false;
     }

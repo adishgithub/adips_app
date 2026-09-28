@@ -14,6 +14,10 @@ import '../../../../../utils/models/account_model.dart';
 /// faded and tagged "Not in total", so the user can see why it isn't
 /// part of the number above.
 ///
+/// With no accounts at all (shouldn't happen: signup seeds two, but a
+/// user can delete them) and [onAddAccount] given, an "Add account"
+/// prompt is shown instead of an empty gap (W.1).
+///
 /// [selectedId] / [onTap] filter Home by account (1.9). When [onClear]
 /// is given, a leading "All" card is shown; it is highlighted while
 /// [selectedId] is null and calls [onClear] when tapped.
@@ -24,6 +28,7 @@ class AccountCards extends StatelessWidget {
     this.selectedId,
     this.onTap,
     this.onClear,
+    this.onAddAccount,
   });
 
   final List<AccountModel> accounts;
@@ -31,9 +36,18 @@ class AccountCards extends StatelessWidget {
   final ValueChanged<AccountModel>? onTap;
   final VoidCallback? onClear;
 
+  /// Shown as an "Add account" prompt when [accounts] is empty. Pass
+  /// null while loading or after a failed load, so the prompt never
+  /// claims "no accounts" when they just haven't arrived.
+  final VoidCallback? onAddAccount;
+
   @override
   Widget build(BuildContext context) {
-    if (accounts.isEmpty) return const SizedBox.shrink();
+    if (accounts.isEmpty) {
+      return onAddAccount == null
+          ? const SizedBox.shrink()
+          : _NoAccountsCard(onAdd: onAddAccount!);
+    }
 
     final bool showAll = onClear != null;
     return SizedBox(
@@ -196,6 +210,47 @@ class _AccountCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Empty state: no accounts yet, with a shortcut to create one.
+class _NoAccountsCard extends StatelessWidget {
+  const _NoAccountsCard({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+    final surfaceColor = isDark ? AdipsPalette.darkTextField : AdipsPalette.lightTextField;
+    final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
+    final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AdipsSizes.md,
+        vertical: AdipsSizes.sm,
+      ),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusSm),
+        border: Border.all(color: lineColor),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.account_balance_wallet_outlined, color: mutedColor),
+          const SizedBox(width: AdipsSizes.sm),
+          Expanded(
+            child: Text(
+              'No accounts yet. Add one to start tracking balances.',
+              style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesEs),
+            ),
+          ),
+          TextButton(onPressed: onAdd, child: const Text('Add account')),
+        ],
       ),
     );
   }

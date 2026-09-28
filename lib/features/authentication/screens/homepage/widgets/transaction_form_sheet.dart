@@ -385,7 +385,7 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
                 const SizedBox(height: AdipsSizes.xs),
                 Text(
                   'Transfers can\'t be edited as a normal transaction. '
-                  'Transfer editing is coming soon.',
+                  'Tap the transfer in the Home list to edit or delete it.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: mutedColor),
                 ),

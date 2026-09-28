@@ -7,7 +7,7 @@ import '../local_storage/storage_utility.dart';
 /// Thrown for a real HTTP response with a non-2xx status code
 /// (e.g. 401 from an invalid/expired token, 404, 500...).
 /// Distinguish this from network failures / timeouts, which throw
-/// plain [Exception] / [TimeoutException] instead — only an
+/// a plain [Exception] with a readable message instead — only an
 /// [ApiException] with statusCode 401 means "the token is actually
 /// invalid," everything else means "we don't know yet."
 class ApiException implements Exception {
@@ -40,6 +40,20 @@ class ApiException implements Exception {
 class AdipsHttpHelper {
   static const String _baseUrl = 'https://adips-backend.onrender.com';
 
+  /// Timeout for normal calls.
+  static const Duration defaultTimeout = Duration(seconds: 15);
+
+  /// Timeout for the first load of a screen (Q6): the free Render
+  /// instance sleeps when idle, and waking it can take well over the
+  /// normal 15s. Loads that may hit a cold server pass this instead.
+  static const Duration coldStartTimeout = Duration(seconds: 30);
+
+  /// What the user sees when a request times out (instead of the raw
+  /// "TimeoutException after 0:00:15..." text).
+  static const String timeoutMessage =
+      'The server is taking too long to respond. It may be waking up, '
+      'so please try again.';
+
   /// The saved auth token, pre-formatted as the `Authorization=<token>`
   /// cookie value every authenticated call needs to pass as `cookie:`.
   /// Null when there's no saved token (not logged in).
@@ -62,8 +76,10 @@ class AdipsHttpHelper {
     try {
       final response = await http
           .post(url, headers: _headers(cookie: cookie), body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(defaultTimeout);
       return _handleResponse(response);
+    } on TimeoutException {
+      throw Exception(timeoutMessage);
     } on http.ClientException {
       throw Exception('Could not reach the server. Check your connection.');
     }
@@ -72,7 +88,7 @@ class AdipsHttpHelper {
   static Future<Map<String, dynamic>> get(
       String endpoint, {
         String? cookie,
-        Duration timeout = const Duration(seconds: 15),
+        Duration timeout = defaultTimeout,
       }) async {
     final url = Uri.parse('$_baseUrl$endpoint');
     try {
@@ -80,6 +96,8 @@ class AdipsHttpHelper {
           .get(url, headers: _headers(cookie: cookie))
           .timeout(timeout);
       return _handleResponse(response);
+    } on TimeoutException {
+      throw Exception(timeoutMessage);
     } on http.ClientException {
       throw Exception('Could not reach the server. Check your connection.');
     }
@@ -94,8 +112,10 @@ class AdipsHttpHelper {
     try {
       final response = await http
           .put(url, headers: _headers(cookie: cookie), body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(defaultTimeout);
       return _handleResponse(response);
+    } on TimeoutException {
+      throw Exception(timeoutMessage);
     } on http.ClientException {
       throw Exception('Could not reach the server. Check your connection.');
     }
@@ -110,8 +130,10 @@ class AdipsHttpHelper {
     try {
       final response = await http
           .patch(url, headers: _headers(cookie: cookie), body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(defaultTimeout);
       return _handleResponse(response);
+    } on TimeoutException {
+      throw Exception(timeoutMessage);
     } on http.ClientException {
       throw Exception('Could not reach the server. Check your connection.');
     }
@@ -125,8 +147,10 @@ class AdipsHttpHelper {
     try {
       final response = await http
           .delete(url, headers: _headers(cookie: cookie))
-          .timeout(const Duration(seconds: 15));
+          .timeout(defaultTimeout);
       return _handleResponse(response);
+    } on TimeoutException {
+      throw Exception(timeoutMessage);
     } on http.ClientException {
       throw Exception('Could not reach the server. Check your connection.');
     }

@@ -1,4 +1,6 @@
 import 'package:adips/common/widgets/navigation/bottom_action_bar.dart';
+import 'package:adips/common/widgets/states/load_error_view.dart';
+import 'package:adips/features/personalization/screens/accounts/accounts_screen.dart';
 import 'package:adips/features/authentication/controllers/accounts/account_controller.dart';
 import 'package:adips/features/authentication/controllers/home/home_controller.dart';
 import 'package:adips/features/authentication/screens/homepage/widgets/account_balance.dart';
@@ -57,6 +59,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               }
 
+              // W.1 / Q6: the load failed (offline, or Render still
+              // waking up). With nothing to show, a Retry screen beats
+              // a "0.00 / No transactions" page that reads as real.
+              final loadError = controller.loadError.value;
+              if (loadError != null &&
+                  controller.transactions.isEmpty &&
+                  accountController.accounts.isEmpty) {
+                return LoadErrorView(message: loadError, onRetry: controller.loadAll);
+              }
+
               return SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
@@ -68,6 +80,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       email: controller.email.value,
                     ),
                     SizedBox(height: AdipsSizes.spaceBtwSections),
+                    // Partial failure (e.g. accounts loaded, list did
+                    // not): keep what we have, but say so.
+                    if (loadError != null) ...[
+                      LoadErrorView(
+                        message: loadError,
+                        onRetry: controller.loadAll,
+                        compact: true,
+                      ),
+                      SizedBox(height: AdipsSizes.spaceBtwItems),
+                    ],
                     // Total comes from /accounts/summary (real balances),
                     // NOT transactions/summary.balance, which is only the
                     // net flow of the filtered rows.
@@ -80,6 +102,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       selectedId: controller.selectedAccountId.value,
                       onTap: (account) => controller.selectAccount(account.id),
                       onClear: () => controller.selectAccount(null),
+                      // Only offer "Add account" when accounts really
+                      // loaded and there are none.
+                      onAddAccount: (!accountController.isLoading.value &&
+                              accountController.loadError.value == null)
+                          ? () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const AccountsScreen()),
+                              )
+                          : null,
                     ),
                     SizedBox(height: AdipsSizes.spaceBtwSections),
                     Row(

@@ -15,11 +15,15 @@ class AccountService {
   /// GET /accounts — active accounts ordered by sort_order, each with
   /// its computed current_balance. Pass [includeArchived] to also get
   /// archived ones (A12).
-  Future<List<AccountModel>> list({bool includeArchived = false}) async {
+  Future<List<AccountModel>> list({
+    bool includeArchived = false,
+    Duration timeout = AdipsHttpHelper.defaultTimeout,
+  }) async {
     final query = includeArchived ? '?include_archived=true' : '';
     final response = await AdipsHttpHelper.get(
       '${AdipsApiConstants.accounts}$query',
       cookie: AdipsHttpHelper.authCookie,
+      timeout: timeout,
     );
     return AdipsHttpHelper.list(response)
         .map((e) => AccountModel.fromJson(e as Map<String, dynamic>))
@@ -37,10 +41,13 @@ class AccountService {
 
   /// GET /accounts/summary — dashboard payload: totals per currency
   /// (only include_in_total accounts) plus the active accounts.
-  Future<AccountSummaryModel> summary() async {
+  Future<AccountSummaryModel> summary({
+    Duration timeout = AdipsHttpHelper.defaultTimeout,
+  }) async {
     final response = await AdipsHttpHelper.get(
       AdipsApiConstants.accountsSummary,
       cookie: AdipsHttpHelper.authCookie,
+      timeout: timeout,
     );
     return AccountSummaryModel.fromJson(AdipsHttpHelper.data(response));
   }

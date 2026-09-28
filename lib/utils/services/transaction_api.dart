@@ -25,6 +25,7 @@ class TransactionApi {
     String? sortBy,
     String? order,
     int? accountId,
+    Duration timeout = AdipsHttpHelper.defaultTimeout,
   }) async {
     final query = <String, String>{
       'page': '$page',
@@ -38,6 +39,7 @@ class TransactionApi {
     final response = await AdipsHttpHelper.get(
       uri.toString(),
       cookie: _cookie,
+      timeout: timeout,
     );
 
     return AdipsHttpHelper.listData(response)
@@ -54,6 +56,7 @@ class TransactionApi {
   static Future<TransactionSummary> summary({
     int? accountId,
     bool includeTransfers = false,
+    Duration timeout = AdipsHttpHelper.defaultTimeout,
   }) async {
     final query = <String, String>{
       if (accountId != null) 'account_id': '$accountId',
@@ -66,6 +69,7 @@ class TransactionApi {
     final response = await AdipsHttpHelper.get(
       uri.toString(),
       cookie: _cookie,
+      timeout: timeout,
     );
     return TransactionSummary.fromJson(AdipsHttpHelper.data(response));
   }

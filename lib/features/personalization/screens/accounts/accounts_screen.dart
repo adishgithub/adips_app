@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../../common/widgets/buttons/custom_elevated_button.dart';
+import '../../../../common/widgets/states/load_error_view.dart';
 import '../../../../data/services/settings_service.dart';
 import '../../../../utils/constants/adips_category_colors.dart';
 import '../../../../utils/constants/adips_icons.dart';
@@ -387,6 +388,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 final accounts = [...active, if (_showArchived) ...archived];
                 if (_controller.isLoading.value && accounts.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
+                }
+                // W.1: a failed load must not read as "No accounts yet".
+                final loadError = _controller.loadError.value;
+                if (loadError != null && accounts.isEmpty) {
+                  return LoadErrorView(message: loadError, onRetry: _reload);
                 }
                 return RefreshIndicator(
                   onRefresh: _reload,

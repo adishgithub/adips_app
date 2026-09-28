@@ -1,5 +1,6 @@
 // controllers/accounts/account_controller.dart
 import 'package:adips/data/services/account_service.dart';
+import 'package:adips/utils/http/http_client.dart';
 import 'package:adips/utils/models/account_model.dart';
 import 'package:get/get.dart';
 
@@ -24,6 +25,11 @@ class AccountController extends GetxController {
   final RxList<AccountModel> accounts = <AccountModel>[].obs;
   final Rx<AccountSummaryModel> summary = AccountSummaryModel.empty.obs;
   final RxBool isLoading = false.obs;
+
+  /// Message from the last [load] that failed, null once a load
+  /// succeeds. Lets screens show a Retry state instead of an empty
+  /// list that looks like "no accounts" (W.1).
+  final RxnString loadError = RxnString();
 
   /// Archived accounts (A12). Empty until [loadArchived] is called.
   final RxList<AccountModel> archivedAccounts = <AccountModel>[].obs;
@@ -52,13 +58,17 @@ class AccountController extends GetxController {
   // fetch everything twice at startup.
 
   /// Loads accounts + summary with a loading flag (first load,
-  /// pull-to-refresh).
-  Future<void> load() async {
+  /// pull-to-refresh). [timeout] defaults to the normal 15s; the
+  /// first load of Home passes the longer cold-start one (Q6).
+  Future<void> load({Duration timeout = AdipsHttpHelper.defaultTimeout}) async {
     isLoading.value = true;
     try {
-      await _fetch();
+      await _fetch(timeout: timeout);
     } catch (e) {
-      _showError('Could not load accounts', e);
+      loadError.value = e.toString().replaceFirst('Exception: ', '');
+      // With nothing loaded the screen shows a Retry state itself; a
+      // snackbar only helps when stale numbers are still on screen.
+      if (accounts.isNotEmpty) _showError('Could not load accounts', e);
     } finally {
       isLoading.value = false;
     }
@@ -183,10 +193,14 @@ class AccountController extends GetxController {
     ]);
   }
 
-  Future<void> _fetch() async {
-    final results = await Future.wait([_service.list(), _service.summary()]);
+  Future<void> _fetch({Duration timeout = AdipsHttpHelper.defaultTimeout}) async {
+    final results = await Future.wait([
+      _service.list(timeout: timeout),
+      _service.summary(timeout: timeout),
+    ]);
     accounts.assignAll(results[0] as List<AccountModel>);
     summary.value = results[1] as AccountSummaryModel;
+    loadError.value = null;
   }
 
   void _showError(String title, Object e) {
