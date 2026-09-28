@@ -9,8 +9,8 @@ import 'package:adips/utils/models/account_model.dart';
 /// user-readable message, e.g. 409 "An account with this name already
 /// exists" (A2) — screens should show that message as-is.
 ///
-/// list/get/create/update/summary/archive/unarchive/delete live here so
-/// far; reorder and adjust are added in the rest of Phase 3.
+/// list/get/create/update/summary/archive/unarchive/delete/reorder live
+/// here so far; adjust is added in the rest of Phase 3.
 class AccountService {
   /// GET /accounts — active accounts ordered by sort_order, each with
   /// its computed current_balance. Pass [includeArchived] to also get
@@ -132,6 +132,17 @@ class AccountService {
         moveTransactionsTo != null ? '?move_transactions_to=$moveTransactionsTo' : '';
     await AdipsHttpHelper.delete(
       '${AdipsApiConstants.account(id)}$query',
+      cookie: AdipsHttpHelper.authCookie,
+    );
+  }
+
+  /// PATCH /accounts/reorder — [items] are {id, sort_order} pairs, applied
+  /// by the backend in one DB transaction: one unknown id fails the whole
+  /// batch (400), so nothing is half-saved. Answers 200 with no `data`.
+  Future<void> reorder(List<Map<String, int>> items) async {
+    await AdipsHttpHelper.patch(
+      AdipsApiConstants.accountsReorder,
+      {'items': items},
       cookie: AdipsHttpHelper.authCookie,
     );
   }

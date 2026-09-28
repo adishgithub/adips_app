@@ -21,8 +21,8 @@ import 'widgets/delete_account_sheet.dart';
 enum _AccountAction { edit, archive, unarchive, delete }
 
 /// Settings > Accounts: list, add, edit, archive / unarchive, delete
-/// (with merge into another account), and a "Show archived" toggle.
-/// Reorder / adjust arrive in the rest of Phase 3.
+/// (with merge into another account), drag-to-reorder, and a "Show
+/// archived" toggle. Adjust arrives in the rest of Phase 3.
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
 
@@ -51,6 +51,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Future<void> _toggleArchived(bool value) async {
     setState(() => _showArchived = value);
     if (value) await _controller.loadArchived();
+  }
+
+  /// Persists a drag. Only offered while archived accounts are hidden:
+  /// the dragged list is then exactly the active accounts, so indices
+  /// map straight onto the controller's list.
+  Future<void> _handleReorder(int oldIndex, int newIndex) async {
+    try {
+      await _controller.reorder(oldIndex, newIndex);
+    } catch (e) {
+      _snack('Could not save the new order: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
   }
 
   void _snack(String message) {
@@ -315,9 +326,20 @@ class _AccountsScreenState extends State<AccountsScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'Show archived',
-                      style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Show archived',
+                          style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
+                        ),
+                        Text(
+                          _showArchived
+                              ? 'Hide archived accounts to reorder.'
+                              : 'Long press and drag to reorder.',
+                          style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
+                        ),
+                      ],
                     ),
                   ),
                   Switch(value: _showArchived, onChanged: _toggleArchived),
@@ -352,7 +374,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             ),
                           ],
                         )
-                      : ListView.separated(
+                      : _showArchived
+                      ? ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.fromLTRB(
                             AdipsSizes.defaultSpace,
@@ -366,6 +389,28 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             account: accounts[i],
                             onTap: () => _openForm(account: accounts[i]),
                             onAction: (a) => _onAction(a, accounts[i]),
+                          ),
+                        )
+                      // Archived hidden: the list is exactly the active
+                      // accounts, so it can be dragged into a new order.
+                      : ReorderableListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(
+                            AdipsSizes.defaultSpace,
+                            AdipsSizes.md,
+                            AdipsSizes.defaultSpace,
+                            AdipsSizes.md,
+                          ),
+                          itemCount: accounts.length,
+                          onReorder: _handleReorder,
+                          itemBuilder: (context, i) => Padding(
+                            key: ValueKey('account-${accounts[i].id}'),
+                            padding: const EdgeInsets.only(bottom: AdipsSizes.sm),
+                            child: _AccountTile(
+                              account: accounts[i],
+                              onTap: () => _openForm(account: accounts[i]),
+                              onAction: (a) => _onAction(a, accounts[i]),
+                            ),
                           ),
                         ),
                 );

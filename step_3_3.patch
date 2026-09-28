@@ -1,0 +1,171 @@
+diff --git a/lib/data/services/account_service.dart b/lib/data/services/account_service.dart
+index 86965f8..7122244 100644
+--- a/lib/data/services/account_service.dart
++++ b/lib/data/services/account_service.dart
+@@ -9,8 +9,8 @@ import 'package:adips/utils/models/account_model.dart';
+ /// user-readable message, e.g. 409 "An account with this name already
+ /// exists" (A2) — screens should show that message as-is.
+ ///
+-/// list/get/create/update/summary/archive/unarchive/delete live here so
+-/// far; reorder and adjust are added in the rest of Phase 3.
++/// list/get/create/update/summary/archive/unarchive/delete/reorder live
++/// here so far; adjust is added in the rest of Phase 3.
+ class AccountService {
+   /// GET /accounts — active accounts ordered by sort_order, each with
+   /// its computed current_balance. Pass [includeArchived] to also get
+@@ -136,6 +136,17 @@ class AccountService {
+     );
+   }
+ 
++  /// PATCH /accounts/reorder — [items] are {id, sort_order} pairs, applied
++  /// by the backend in one DB transaction: one unknown id fails the whole
++  /// batch (400), so nothing is half-saved. Answers 200 with no `data`.
++  Future<void> reorder(List<Map<String, int>> items) async {
++    await AdipsHttpHelper.patch(
++      AdipsApiConstants.accountsReorder,
++      {'items': items},
++      cookie: AdipsHttpHelper.authCookie,
++    );
++  }
++
+   /// PATCH /accounts/:id — only non-null fields are sent, matching the
+   /// backend's pointer-field UpdateAccountRequest (omitted = untouched).
+   ///
+diff --git a/lib/features/authentication/controllers/accounts/account_controller.dart b/lib/features/authentication/controllers/accounts/account_controller.dart
+index 3a52c49..7dc2d4e 100644
+--- a/lib/features/authentication/controllers/accounts/account_controller.dart
++++ b/lib/features/authentication/controllers/accounts/account_controller.dart
+@@ -105,6 +105,37 @@ class AccountController extends GetxController {
+     ]);
+   }
+ 
++  /// Moves the active account at [oldIndex] to [newIndex] (the raw
++  /// indices ReorderableListView reports) and saves the new order.
++  ///
++  /// The list is updated first so the drag doesn't snap back while the
++  /// request is in flight. If the save fails, the server's order is
++  /// re-fetched (so the UI never shows an order that wasn't saved) and
++  /// the error is rethrown for the screen to show.
++  Future<void> reorder(int oldIndex, int newIndex) async {
++    if (newIndex > oldIndex) newIndex -= 1;
++    if (oldIndex == newIndex) return;
++
++    final list = accounts.toList();
++    final moved = list.removeAt(oldIndex);
++    list.insert(newIndex, moved);
++    final reordered = [
++      for (int i = 0; i < list.length; i++) list[i].copyWith(sortOrder: i),
++    ];
++    accounts.assignAll(reordered);
++
++    try {
++      await _service.reorder([
++        for (final a in reordered) {'id': a.id, 'sort_order': a.sortOrder},
++      ]);
++      // Keep the dashboard summary's account order in step too.
++      await refreshQuietly();
++    } catch (e) {
++      await refreshQuietly();
++      rethrow;
++    }
++  }
++
+   /// Read-only preview of a merge-delete. Does NOT catch: the server's
+   /// message is thrown so the sheet can show it inline.
+   Future<AccountDeletePreview> deletePreview(int id, int moveTo) =>
+diff --git a/lib/features/personalization/screens/accounts/accounts_screen.dart b/lib/features/personalization/screens/accounts/accounts_screen.dart
+index e2dd2b8..b2914eb 100644
+--- a/lib/features/personalization/screens/accounts/accounts_screen.dart
++++ b/lib/features/personalization/screens/accounts/accounts_screen.dart
+@@ -21,8 +21,8 @@ import 'widgets/delete_account_sheet.dart';
+ enum _AccountAction { edit, archive, unarchive, delete }
+ 
+ /// Settings > Accounts: list, add, edit, archive / unarchive, delete
+-/// (with merge into another account), and a "Show archived" toggle.
+-/// Reorder / adjust arrive in the rest of Phase 3.
++/// (with merge into another account), drag-to-reorder, and a "Show
++/// archived" toggle. Adjust arrives in the rest of Phase 3.
+ class AccountsScreen extends StatefulWidget {
+   const AccountsScreen({super.key});
+ 
+@@ -53,6 +53,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
+     if (value) await _controller.loadArchived();
+   }
+ 
++  /// Persists a drag. Only offered while archived accounts are hidden:
++  /// the dragged list is then exactly the active accounts, so indices
++  /// map straight onto the controller's list.
++  Future<void> _handleReorder(int oldIndex, int newIndex) async {
++    try {
++      await _controller.reorder(oldIndex, newIndex);
++    } catch (e) {
++      _snack('Could not save the new order: ${e.toString().replaceFirst('Exception: ', '')}');
++    }
++  }
++
+   void _snack(String message) {
+     if (!mounted) return;
+     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+@@ -315,9 +326,20 @@ class _AccountsScreenState extends State<AccountsScreen> {
+               child: Row(
+                 children: [
+                   Expanded(
+-                    child: Text(
+-                      'Show archived',
+-                      style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
++                    child: Column(
++                      crossAxisAlignment: CrossAxisAlignment.start,
++                      children: [
++                        Text(
++                          'Show archived',
++                          style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
++                        ),
++                        Text(
++                          _showArchived
++                              ? 'Hide archived accounts to reorder.'
++                              : 'Long press and drag to reorder.',
++                          style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
++                        ),
++                      ],
+                     ),
+                   ),
+                   Switch(value: _showArchived, onChanged: _toggleArchived),
+@@ -352,7 +374,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
+                             ),
+                           ],
+                         )
+-                      : ListView.separated(
++                      : _showArchived
++                      ? ListView.separated(
+                           physics: const AlwaysScrollableScrollPhysics(),
+                           padding: const EdgeInsets.fromLTRB(
+                             AdipsSizes.defaultSpace,
+@@ -367,6 +390,28 @@ class _AccountsScreenState extends State<AccountsScreen> {
+                             onTap: () => _openForm(account: accounts[i]),
+                             onAction: (a) => _onAction(a, accounts[i]),
+                           ),
++                        )
++                      // Archived hidden: the list is exactly the active
++                      // accounts, so it can be dragged into a new order.
++                      : ReorderableListView.builder(
++                          physics: const AlwaysScrollableScrollPhysics(),
++                          padding: const EdgeInsets.fromLTRB(
++                            AdipsSizes.defaultSpace,
++                            AdipsSizes.md,
++                            AdipsSizes.defaultSpace,
++                            AdipsSizes.md,
++                          ),
++                          itemCount: accounts.length,
++                          onReorder: _handleReorder,
++                          itemBuilder: (context, i) => Padding(
++                            key: ValueKey('account-${accounts[i].id}'),
++                            padding: const EdgeInsets.only(bottom: AdipsSizes.sm),
++                            child: _AccountTile(
++                              account: accounts[i],
++                              onTap: () => _openForm(account: accounts[i]),
++                              onAction: (a) => _onAction(a, accounts[i]),
++                            ),
++                          ),
+                         ),
+                 );
+               }),

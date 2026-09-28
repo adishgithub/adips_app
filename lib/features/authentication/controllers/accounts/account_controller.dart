@@ -105,6 +105,37 @@ class AccountController extends GetxController {
     ]);
   }
 
+  /// Moves the active account at [oldIndex] to [newIndex] (the raw
+  /// indices ReorderableListView reports) and saves the new order.
+  ///
+  /// The list is updated first so the drag doesn't snap back while the
+  /// request is in flight. If the save fails, the server's order is
+  /// re-fetched (so the UI never shows an order that wasn't saved) and
+  /// the error is rethrown for the screen to show.
+  Future<void> reorder(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (oldIndex == newIndex) return;
+
+    final list = accounts.toList();
+    final moved = list.removeAt(oldIndex);
+    list.insert(newIndex, moved);
+    final reordered = [
+      for (int i = 0; i < list.length; i++) list[i].copyWith(sortOrder: i),
+    ];
+    accounts.assignAll(reordered);
+
+    try {
+      await _service.reorder([
+        for (final a in reordered) {'id': a.id, 'sort_order': a.sortOrder},
+      ]);
+      // Keep the dashboard summary's account order in step too.
+      await refreshQuietly();
+    } catch (e) {
+      await refreshQuietly();
+      rethrow;
+    }
+  }
+
   /// Read-only preview of a merge-delete. Does NOT catch: the server's
   /// message is thrown so the sheet can show it inline.
   Future<AccountDeletePreview> deletePreview(int id, int moveTo) =>
