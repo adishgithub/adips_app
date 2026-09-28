@@ -12,9 +12,10 @@ import 'package:get/get.dart';
 /// the numbers stay correct. HomeController already does this after
 /// every transaction mutation.
 ///
-/// Holds active (non-archived) accounts only. Screens that need
-/// archived ones (Accounts management, step 3.1) call
-/// AccountService.list(includeArchived: true) themselves.
+/// [accounts] holds active (non-archived) accounts only, so Home and
+/// every picker never see archived ones. The Accounts management
+/// screen's "Show archived" toggle reads [archivedAccounts], filled
+/// on demand by [loadArchived].
 class AccountController extends GetxController {
   static AccountController get instance => Get.find();
 
@@ -23,6 +24,9 @@ class AccountController extends GetxController {
   final RxList<AccountModel> accounts = <AccountModel>[].obs;
   final Rx<AccountSummaryModel> summary = AccountSummaryModel.empty.obs;
   final RxBool isLoading = false.obs;
+
+  /// Archived accounts (A12). Empty until [loadArchived] is called.
+  final RxList<AccountModel> archivedAccounts = <AccountModel>[].obs;
 
   /// Active accounts, in the backend's sort_order.
   List<AccountModel> get activeAccounts =>
@@ -68,6 +72,37 @@ class AccountController extends GetxController {
     } catch (e) {
       _showError('Could not refresh accounts', e);
     }
+  }
+
+  /// Fetches the archived accounts for the "Show archived" list.
+  Future<void> loadArchived() async {
+    try {
+      final all = await _service.list(includeArchived: true);
+      archivedAccounts.assignAll(all.where((a) => a.isArchived));
+    } catch (e) {
+      _showError('Could not load archived accounts', e);
+    }
+  }
+
+  /// Archives an account, then refreshes balances/lists. Does NOT
+  /// catch: the server's 409 message (default account, last active
+  /// account, non-zero balance) is thrown as ApiException so the
+  /// screen can show it, or offer "transfer balance out".
+  Future<void> archive(int id, {bool refreshArchived = false}) async {
+    await _service.archive(id);
+    await Future.wait([
+      refreshQuietly(),
+      if (refreshArchived) loadArchived(),
+    ]);
+  }
+
+  /// Unarchives an account (always allowed), then refreshes.
+  Future<void> unarchive(int id, {bool refreshArchived = false}) async {
+    await _service.unarchive(id);
+    await Future.wait([
+      refreshQuietly(),
+      if (refreshArchived) loadArchived(),
+    ]);
   }
 
   Future<void> _fetch() async {

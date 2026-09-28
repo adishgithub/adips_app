@@ -1,0 +1,479 @@
+diff --git a/lib/data/services/account_service.dart b/lib/data/services/account_service.dart
+index d260a6c..dcd8c1c 100644
+--- a/lib/data/services/account_service.dart
++++ b/lib/data/services/account_service.dart
+@@ -9,8 +9,8 @@ import 'package:adips/utils/models/account_model.dart';
+ /// user-readable message, e.g. 409 "An account with this name already
+ /// exists" (A2) — screens should show that message as-is.
+ ///
+-/// Only list/get/create/update/summary live here for now; archive,
+-/// delete, reorder and adjust are added in Phase 3.
++/// list/get/create/update/summary/archive/unarchive live here so far;
++/// delete, reorder and adjust are added in the rest of Phase 3.
+ class AccountService {
+   /// GET /accounts — active accounts ordered by sort_order, each with
+   /// its computed current_balance. Pass [includeArchived] to also get
+@@ -76,6 +76,31 @@ class AccountService {
+     return AccountModel.fromJson(AdipsHttpHelper.data(response));
+   }
+ 
++  /// PATCH /accounts/:id/archive — hides the account, history stays.
++  ///
++  /// Refused with 409 (message is user-readable, show it as-is) when
++  /// it is the default account (A6), the last active account (A7), or
++  /// its balance isn't zero (A11). Archiving an archived account is a
++  /// harmless no-op server-side.
++  Future<AccountModel> archive(int id) async {
++    final response = await AdipsHttpHelper.patch(
++      AdipsApiConstants.accountArchive(id),
++      <String, dynamic>{},
++      cookie: AdipsHttpHelper.authCookie,
++    );
++    return AccountModel.fromJson(AdipsHttpHelper.data(response));
++  }
++
++  /// PATCH /accounts/:id/unarchive — always allowed (A11).
++  Future<AccountModel> unarchive(int id) async {
++    final response = await AdipsHttpHelper.patch(
++      AdipsApiConstants.accountUnarchive(id),
++      <String, dynamic>{},
++      cookie: AdipsHttpHelper.authCookie,
++    );
++    return AccountModel.fromJson(AdipsHttpHelper.data(response));
++  }
++
+   /// PATCH /accounts/:id — only non-null fields are sent, matching the
+   /// backend's pointer-field UpdateAccountRequest (omitted = untouched).
+   ///
+diff --git a/lib/features/authentication/controllers/accounts/account_controller.dart b/lib/features/authentication/controllers/accounts/account_controller.dart
+index 0b21b97..6a0ccdb 100644
+--- a/lib/features/authentication/controllers/accounts/account_controller.dart
++++ b/lib/features/authentication/controllers/accounts/account_controller.dart
+@@ -12,9 +12,10 @@ import 'package:get/get.dart';
+ /// the numbers stay correct. HomeController already does this after
+ /// every transaction mutation.
+ ///
+-/// Holds active (non-archived) accounts only. Screens that need
+-/// archived ones (Accounts management, step 3.1) call
+-/// AccountService.list(includeArchived: true) themselves.
++/// [accounts] holds active (non-archived) accounts only, so Home and
++/// every picker never see archived ones. The Accounts management
++/// screen's "Show archived" toggle reads [archivedAccounts], filled
++/// on demand by [loadArchived].
+ class AccountController extends GetxController {
+   static AccountController get instance => Get.find();
+ 
+@@ -24,6 +25,9 @@ class AccountController extends GetxController {
+   final Rx<AccountSummaryModel> summary = AccountSummaryModel.empty.obs;
+   final RxBool isLoading = false.obs;
+ 
++  /// Archived accounts (A12). Empty until [loadArchived] is called.
++  final RxList<AccountModel> archivedAccounts = <AccountModel>[].obs;
++
+   /// Active accounts, in the backend's sort_order.
+   List<AccountModel> get activeAccounts =>
+       accounts.where((a) => !a.isArchived).toList();
+@@ -70,6 +74,37 @@ class AccountController extends GetxController {
+     }
+   }
+ 
++  /// Fetches the archived accounts for the "Show archived" list.
++  Future<void> loadArchived() async {
++    try {
++      final all = await _service.list(includeArchived: true);
++      archivedAccounts.assignAll(all.where((a) => a.isArchived));
++    } catch (e) {
++      _showError('Could not load archived accounts', e);
++    }
++  }
++
++  /// Archives an account, then refreshes balances/lists. Does NOT
++  /// catch: the server's 409 message (default account, last active
++  /// account, non-zero balance) is thrown as ApiException so the
++  /// screen can show it, or offer "transfer balance out".
++  Future<void> archive(int id, {bool refreshArchived = false}) async {
++    await _service.archive(id);
++    await Future.wait([
++      refreshQuietly(),
++      if (refreshArchived) loadArchived(),
++    ]);
++  }
++
++  /// Unarchives an account (always allowed), then refreshes.
++  Future<void> unarchive(int id, {bool refreshArchived = false}) async {
++    await _service.unarchive(id);
++    await Future.wait([
++      refreshQuietly(),
++      if (refreshArchived) loadArchived(),
++    ]);
++  }
++
+   Future<void> _fetch() async {
+     final results = await Future.wait([_service.list(), _service.summary()]);
+     accounts.assignAll(results[0] as List<AccountModel>);
+diff --git a/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart b/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart
+index 287baa9..e5bfb1d 100644
+--- a/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart
++++ b/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart
+@@ -18,20 +18,46 @@ import 'package:intl/intl.dart';
+ 
+ /// Opens the transfer sheet. Pass an existing [transfer] to edit or
+ /// delete it (both legs change together, X6); pass null to create one.
+-Future<void> showTransferFormSheet(BuildContext context, {TransferModel? transfer}) {
++///
++/// When creating, [fromAccountId] / [toAccountId] / [amount] optionally
++/// pre-fill the form (used by "transfer the balance out" before
++/// archiving an account). The user can still change everything.
++Future<void> showTransferFormSheet(
++  BuildContext context, {
++  TransferModel? transfer,
++  int? fromAccountId,
++  int? toAccountId,
++  double? amount,
++}) {
+   return showModalBottomSheet(
+     context: context,
+     isScrollControlled: true,
+     backgroundColor: Colors.transparent,
+-    builder: (_) => TransferFormSheet(transfer: transfer),
++    builder: (_) => TransferFormSheet(
++      transfer: transfer,
++      fromAccountId: fromAccountId,
++      toAccountId: toAccountId,
++      amount: amount,
++    ),
+   );
+ }
+ 
+ class TransferFormSheet extends StatefulWidget {
+-  const TransferFormSheet({super.key, this.transfer});
++  const TransferFormSheet({
++    super.key,
++    this.transfer,
++    this.fromAccountId,
++    this.toAccountId,
++    this.amount,
++  });
+ 
+   final TransferModel? transfer;
+ 
++  /// Create-mode pre-fill (ignored when [transfer] is set).
++  final int? fromAccountId;
++  final int? toAccountId;
++  final double? amount;
++
+   bool get isEditing => transfer != null;
+ 
+   @override
+@@ -67,8 +93,10 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
+   void initState() {
+     super.initState();
+     final t = widget.transfer;
+-    _amountController =
+-        TextEditingController(text: t != null ? t.amount.toStringAsFixed(2) : '');
++    final presetAmount = t?.amount ?? widget.amount;
++    _amountController = TextEditingController(
++      text: presetAmount != null ? presetAmount.toStringAsFixed(2) : '',
++    );
+     _noteController = TextEditingController(text: t?.note ?? '');
+     _date = t?.transactionDate ?? DateTime.now();
+     // Rebuild on every keystroke so the overdraft warning stays live.
+@@ -90,8 +118,24 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
+       _from = _accounts.byId(t.fromAccountId);
+       _to = _accounts.byId(t.toAccountId);
+     } else {
+-      // New transfer: money usually leaves the default account.
+-      _from = _accounts.defaultAccount;
++      final presetFrom =
++          widget.fromAccountId != null ? _accounts.byId(widget.fromAccountId!) : null;
++      final presetTo =
++          widget.toAccountId != null ? _accounts.byId(widget.toAccountId!) : null;
++      _to = presetTo;
++      if (presetFrom != null) {
++        _from = presetFrom;
++      } else if (presetTo != null) {
++        // Only same-currency accounts other than To can be the source;
++        // prefer the default one.
++        final candidates = _accounts.activeAccounts
++            .where((a) => a.id != presetTo.id && a.currency == presetTo.currency)
++            .toList();
++        _from = candidates.where((a) => a.isDefault).firstOrNull ?? candidates.firstOrNull;
++      } else {
++        // New transfer: money usually leaves the default account.
++        _from = _accounts.defaultAccount;
++      }
+     }
+   }
+ 
+diff --git a/lib/features/personalization/screens/accounts/accounts_screen.dart b/lib/features/personalization/screens/accounts/accounts_screen.dart
+index 55287f3..c5ed811 100644
+--- a/lib/features/personalization/screens/accounts/accounts_screen.dart
++++ b/lib/features/personalization/screens/accounts/accounts_screen.dart
+@@ -9,12 +9,18 @@ import '../../../../utils/constants/adips_icons.dart';
+ import '../../../../utils/constants/adips_palette.dart';
+ import '../../../../utils/constants/sizes.dart';
+ import '../../../../utils/helpers/helper_functions.dart';
++import '../../../../utils/http/http_client.dart';
+ import '../../../../utils/models/account_model.dart';
+ import '../../../authentication/controllers/accounts/account_controller.dart';
++import '../../../authentication/controllers/home/home_controller.dart';
++import '../../../authentication/screens/homepage/widgets/transfer_form_sheet.dart';
+ import 'widgets/account_form_sheet.dart';
+ 
+-/// Settings > Accounts: list, add and edit accounts.
+-/// Archive / delete / reorder / adjust arrive in Phase 3.
++enum _AccountAction { edit, archive, unarchive }
++
++/// Settings > Accounts: list, add, edit, archive / unarchive, and a
++/// "Show archived" toggle. Delete / reorder / adjust arrive in the
++/// rest of Phase 3.
+ class AccountsScreen extends StatefulWidget {
+   const AccountsScreen({super.key});
+ 
+@@ -25,6 +31,8 @@ class AccountsScreen extends StatefulWidget {
+ class _AccountsScreenState extends State<AccountsScreen> {
+   final AccountController _controller = AccountController.instance;
+ 
++  bool _showArchived = false;
++
+   @override
+   void initState() {
+     super.initState();
+@@ -33,6 +41,112 @@ class _AccountsScreenState extends State<AccountsScreen> {
+     _controller.load();
+   }
+ 
++  Future<void> _reload() async {
++    await _controller.load();
++    if (_showArchived) await _controller.loadArchived();
++  }
++
++  Future<void> _toggleArchived(bool value) async {
++    setState(() => _showArchived = value);
++    if (value) await _controller.loadArchived();
++  }
++
++  void _snack(String message) {
++    if (!mounted) return;
++    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
++  }
++
++  Future<void> _archive(AccountModel account) async {
++    final confirmed = await showDialog<bool>(
++      context: context,
++      builder: (ctx) => AlertDialog(
++        title: Text('Archive ${account.name}?'),
++        content: const Text(
++          'It will be hidden from Home and from account pickers. Its '
++          'transactions are kept, and you can unarchive it any time.',
++        ),
++        actions: [
++          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
++          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Archive')),
++        ],
++      ),
++    );
++    if (confirmed != true) return;
++
++    try {
++      await _controller.archive(account.id, refreshArchived: _showArchived);
++      // Home may be filtered to this account; it is gone from the
++      // cards now, so go back to "All".
++      final home = HomeController.instance;
++      if (home.selectedAccountId.value == account.id) await home.selectAccount(null);
++      _snack('${account.name} archived');
++    } on ApiException catch (e) {
++      // A11: non-zero balance gets a shortcut; A6 (default account)
++      // and A7 (last active account) are explained by the server's own
++      // message.
++      if (e.statusCode == 409 &&
++          e.message.toLowerCase().contains('zero') &&
++          account.currentBalance.abs() >= 0.005) {
++        await _offerBalanceTransfer(account, e.message);
++      } else {
++        _snack(e.message);
++      }
++    } catch (e) {
++      _snack(e.toString().replaceFirst('Exception: ', ''));
++    }
++  }
++
++  /// Archiving needs a zero balance: explain, and open the transfer
++  /// sheet pre-filled to clear it (out of the account if it holds
++  /// money, into it if it's overdrawn).
++  Future<void> _offerBalanceTransfer(AccountModel account, String serverMessage) async {
++    final positive = account.currentBalance > 0;
++    final go = await showDialog<bool>(
++      context: context,
++      builder: (ctx) => AlertDialog(
++        title: const Text('Balance must be zero'),
++        content: Text(
++          '$serverMessage\n\n${account.name} currently has '
++          '${AdipsFormatters.money(account.currentBalance, account.currency)}.',
++        ),
++        actions: [
++          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
++          TextButton(
++            onPressed: () => Navigator.of(ctx).pop(true),
++            child: Text(positive ? 'Transfer balance out' : 'Add money to it'),
++          ),
++        ],
++      ),
++    );
++    if (go != true || !mounted) return;
++    await showTransferFormSheet(
++      context,
++      fromAccountId: positive ? account.id : null,
++      toAccountId: positive ? null : account.id,
++      amount: account.currentBalance.abs(),
++    );
++  }
++
++  Future<void> _unarchive(AccountModel account) async {
++    try {
++      await _controller.unarchive(account.id, refreshArchived: _showArchived);
++      _snack('${account.name} is active again');
++    } catch (e) {
++      _snack(e.toString().replaceFirst('Exception: ', ''));
++    }
++  }
++
++  void _onAction(_AccountAction action, AccountModel account) {
++    switch (action) {
++      case _AccountAction.edit:
++        _openForm(account: account);
++      case _AccountAction.archive:
++        _archive(account);
++      case _AccountAction.unarchive:
++        _unarchive(account);
++    }
++  }
++
+   /// Currency to pre-fill for a new account: the user's settings
+   /// currency, falling back to the default account's, then INR.
+   Future<String> _defaultCurrency() async {
+@@ -81,14 +195,37 @@ class _AccountsScreenState extends State<AccountsScreen> {
+       body: SafeArea(
+         child: Column(
+           children: [
++            Padding(
++              padding: const EdgeInsets.fromLTRB(
++                AdipsSizes.defaultSpace,
++                AdipsSizes.xs,
++                AdipsSizes.defaultSpace,
++                0,
++              ),
++              child: Row(
++                children: [
++                  Expanded(
++                    child: Text(
++                      'Show archived',
++                      style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
++                    ),
++                  ),
++                  Switch(value: _showArchived, onChanged: _toggleArchived),
++                ],
++              ),
++            ),
+             Expanded(
+               child: Obx(() {
+-                final accounts = _controller.accounts.toList();
++                // Active accounts first (backend order), then archived
++                // ones when the toggle is on.
++                final active = _controller.accounts.toList();
++                final archived = _controller.archivedAccounts.toList();
++                final accounts = [...active, if (_showArchived) ...archived];
+                 if (_controller.isLoading.value && accounts.isEmpty) {
+                   return const Center(child: CircularProgressIndicator());
+                 }
+                 return RefreshIndicator(
+-                  onRefresh: _controller.load,
++                  onRefresh: _reload,
+                   child: accounts.isEmpty
+                       // Scrollable so pull-to-refresh works when empty.
+                       ? ListView(
+@@ -118,6 +255,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
+                           itemBuilder: (context, i) => _AccountTile(
+                             account: accounts[i],
+                             onTap: () => _openForm(account: accounts[i]),
++                            onAction: (a) => _onAction(a, accounts[i]),
+                           ),
+                         ),
+                 );
+@@ -140,10 +278,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
+ }
+ 
+ class _AccountTile extends StatelessWidget {
+-  const _AccountTile({required this.account, required this.onTap});
++  const _AccountTile({
++    required this.account,
++    required this.onTap,
++    required this.onAction,
++  });
+ 
+   final AccountModel account;
+   final VoidCallback onTap;
++  final ValueChanged<_AccountAction> onAction;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -157,7 +300,10 @@ class _AccountTile extends StatelessWidget {
+         isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
+     final color = AdipsCategoryColors.byId(account.colorId);
+ 
+-    return Container(
++    return Opacity(
++      // Archived rows are greyed out.
++      opacity: account.isArchived ? 0.55 : 1,
++      child: Container(
+       clipBehavior: Clip.antiAlias,
+       decoration: BoxDecoration(
+         borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusMd),
+@@ -188,20 +334,41 @@ class _AccountTile extends StatelessWidget {
+                   AccountTypeInfo.of(account.type).label,
+                   style: TextStyle(color: mutedColor),
+                 ),
++                if (account.isArchived) _Badge(label: 'Archived', color: mutedColor),
+                 if (account.isDefault) _Badge(label: 'Default', color: brandColor),
+                 if (!account.includeInTotal) _Badge(label: 'Excluded', color: mutedColor),
+               ],
+             ),
+           ),
+-          trailing: Text(
+-            AdipsFormatters.money(account.currentBalance, account.currency),
+-            style: TextStyle(
+-              fontWeight: FontWeight.w700,
+-              color: account.currentBalance < 0 ? lossColor : textColor,
+-            ),
++          trailing: Row(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              Text(
++                AdipsFormatters.money(account.currentBalance, account.currency),
++                style: TextStyle(
++                  fontWeight: FontWeight.w700,
++                  color: account.currentBalance < 0 ? lossColor : textColor,
++                ),
++              ),
++              PopupMenuButton<_AccountAction>(
++                tooltip: 'More',
++                icon: Icon(Icons.more_vert_rounded, color: mutedColor),
++                onSelected: onAction,
++                itemBuilder: (_) => [
++                  const PopupMenuItem(value: _AccountAction.edit, child: Text('Edit')),
++                  if (account.isArchived)
++                    const PopupMenuItem(
++                        value: _AccountAction.unarchive, child: Text('Unarchive'))
++                  else
++                    const PopupMenuItem(
++                        value: _AccountAction.archive, child: Text('Archive')),
++                ],
++              ),
++            ],
+           ),
+         ),
+       ),
++      ),
+     );
+   }
+ }

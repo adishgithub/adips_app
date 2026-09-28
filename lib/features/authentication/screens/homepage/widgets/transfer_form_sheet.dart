@@ -18,19 +18,45 @@ import 'package:intl/intl.dart';
 
 /// Opens the transfer sheet. Pass an existing [transfer] to edit or
 /// delete it (both legs change together, X6); pass null to create one.
-Future<void> showTransferFormSheet(BuildContext context, {TransferModel? transfer}) {
+///
+/// When creating, [fromAccountId] / [toAccountId] / [amount] optionally
+/// pre-fill the form (used by "transfer the balance out" before
+/// archiving an account). The user can still change everything.
+Future<void> showTransferFormSheet(
+  BuildContext context, {
+  TransferModel? transfer,
+  int? fromAccountId,
+  int? toAccountId,
+  double? amount,
+}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => TransferFormSheet(transfer: transfer),
+    builder: (_) => TransferFormSheet(
+      transfer: transfer,
+      fromAccountId: fromAccountId,
+      toAccountId: toAccountId,
+      amount: amount,
+    ),
   );
 }
 
 class TransferFormSheet extends StatefulWidget {
-  const TransferFormSheet({super.key, this.transfer});
+  const TransferFormSheet({
+    super.key,
+    this.transfer,
+    this.fromAccountId,
+    this.toAccountId,
+    this.amount,
+  });
 
   final TransferModel? transfer;
+
+  /// Create-mode pre-fill (ignored when [transfer] is set).
+  final int? fromAccountId;
+  final int? toAccountId;
+  final double? amount;
 
   bool get isEditing => transfer != null;
 
@@ -67,8 +93,10 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
   void initState() {
     super.initState();
     final t = widget.transfer;
-    _amountController =
-        TextEditingController(text: t != null ? t.amount.toStringAsFixed(2) : '');
+    final presetAmount = t?.amount ?? widget.amount;
+    _amountController = TextEditingController(
+      text: presetAmount != null ? presetAmount.toStringAsFixed(2) : '',
+    );
     _noteController = TextEditingController(text: t?.note ?? '');
     _date = t?.transactionDate ?? DateTime.now();
     // Rebuild on every keystroke so the overdraft warning stays live.
@@ -90,8 +118,24 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
       _from = _accounts.byId(t.fromAccountId);
       _to = _accounts.byId(t.toAccountId);
     } else {
-      // New transfer: money usually leaves the default account.
-      _from = _accounts.defaultAccount;
+      final presetFrom =
+          widget.fromAccountId != null ? _accounts.byId(widget.fromAccountId!) : null;
+      final presetTo =
+          widget.toAccountId != null ? _accounts.byId(widget.toAccountId!) : null;
+      _to = presetTo;
+      if (presetFrom != null) {
+        _from = presetFrom;
+      } else if (presetTo != null) {
+        // Only same-currency accounts other than To can be the source;
+        // prefer the default one.
+        final candidates = _accounts.activeAccounts
+            .where((a) => a.id != presetTo.id && a.currency == presetTo.currency)
+            .toList();
+        _from = candidates.where((a) => a.isDefault).firstOrNull ?? candidates.firstOrNull;
+      } else {
+        // New transfer: money usually leaves the default account.
+        _from = _accounts.defaultAccount;
+      }
     }
   }
 

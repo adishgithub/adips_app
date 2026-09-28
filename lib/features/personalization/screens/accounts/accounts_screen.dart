@@ -9,12 +9,18 @@ import '../../../../utils/constants/adips_icons.dart';
 import '../../../../utils/constants/adips_palette.dart';
 import '../../../../utils/constants/sizes.dart';
 import '../../../../utils/helpers/helper_functions.dart';
+import '../../../../utils/http/http_client.dart';
 import '../../../../utils/models/account_model.dart';
 import '../../../authentication/controllers/accounts/account_controller.dart';
+import '../../../authentication/controllers/home/home_controller.dart';
+import '../../../authentication/screens/homepage/widgets/transfer_form_sheet.dart';
 import 'widgets/account_form_sheet.dart';
 
-/// Settings > Accounts: list, add and edit accounts.
-/// Archive / delete / reorder / adjust arrive in Phase 3.
+enum _AccountAction { edit, archive, unarchive }
+
+/// Settings > Accounts: list, add, edit, archive / unarchive, and a
+/// "Show archived" toggle. Delete / reorder / adjust arrive in the
+/// rest of Phase 3.
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
 
@@ -25,12 +31,120 @@ class AccountsScreen extends StatefulWidget {
 class _AccountsScreenState extends State<AccountsScreen> {
   final AccountController _controller = AccountController.instance;
 
+  bool _showArchived = false;
+
   @override
   void initState() {
     super.initState();
     // Home already loaded accounts, but balances may be stale if the
     // user got here from somewhere else, so refresh on entry.
     _controller.load();
+  }
+
+  Future<void> _reload() async {
+    await _controller.load();
+    if (_showArchived) await _controller.loadArchived();
+  }
+
+  Future<void> _toggleArchived(bool value) async {
+    setState(() => _showArchived = value);
+    if (value) await _controller.loadArchived();
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _archive(AccountModel account) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Archive ${account.name}?'),
+        content: const Text(
+          'It will be hidden from Home and from account pickers. Its '
+          'transactions are kept, and you can unarchive it any time.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Archive')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _controller.archive(account.id, refreshArchived: _showArchived);
+      // Home may be filtered to this account; it is gone from the
+      // cards now, so go back to "All".
+      final home = HomeController.instance;
+      if (home.selectedAccountId.value == account.id) await home.selectAccount(null);
+      _snack('${account.name} archived');
+    } on ApiException catch (e) {
+      // A11: non-zero balance gets a shortcut; A6 (default account)
+      // and A7 (last active account) are explained by the server's own
+      // message.
+      if (e.statusCode == 409 &&
+          e.message.toLowerCase().contains('zero') &&
+          account.currentBalance.abs() >= 0.005) {
+        await _offerBalanceTransfer(account, e.message);
+      } else {
+        _snack(e.message);
+      }
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  /// Archiving needs a zero balance: explain, and open the transfer
+  /// sheet pre-filled to clear it (out of the account if it holds
+  /// money, into it if it's overdrawn).
+  Future<void> _offerBalanceTransfer(AccountModel account, String serverMessage) async {
+    final positive = account.currentBalance > 0;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Balance must be zero'),
+        content: Text(
+          '$serverMessage\n\n${account.name} currently has '
+          '${AdipsFormatters.money(account.currentBalance, account.currency)}.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(positive ? 'Transfer balance out' : 'Add money to it'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    await showTransferFormSheet(
+      context,
+      fromAccountId: positive ? account.id : null,
+      toAccountId: positive ? null : account.id,
+      amount: account.currentBalance.abs(),
+    );
+  }
+
+  Future<void> _unarchive(AccountModel account) async {
+    try {
+      await _controller.unarchive(account.id, refreshArchived: _showArchived);
+      _snack('${account.name} is active again');
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  void _onAction(_AccountAction action, AccountModel account) {
+    switch (action) {
+      case _AccountAction.edit:
+        _openForm(account: account);
+      case _AccountAction.archive:
+        _archive(account);
+      case _AccountAction.unarchive:
+        _unarchive(account);
+    }
   }
 
   /// Currency to pre-fill for a new account: the user's settings
@@ -81,14 +195,37 @@ class _AccountsScreenState extends State<AccountsScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AdipsSizes.defaultSpace,
+                AdipsSizes.xs,
+                AdipsSizes.defaultSpace,
+                0,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Show archived',
+                      style: TextStyle(color: mutedColor, fontSize: AdipsSizes.fontSizesSm),
+                    ),
+                  ),
+                  Switch(value: _showArchived, onChanged: _toggleArchived),
+                ],
+              ),
+            ),
             Expanded(
               child: Obx(() {
-                final accounts = _controller.accounts.toList();
+                // Active accounts first (backend order), then archived
+                // ones when the toggle is on.
+                final active = _controller.accounts.toList();
+                final archived = _controller.archivedAccounts.toList();
+                final accounts = [...active, if (_showArchived) ...archived];
                 if (_controller.isLoading.value && accounts.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 return RefreshIndicator(
-                  onRefresh: _controller.load,
+                  onRefresh: _reload,
                   child: accounts.isEmpty
                       // Scrollable so pull-to-refresh works when empty.
                       ? ListView(
@@ -118,6 +255,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           itemBuilder: (context, i) => _AccountTile(
                             account: accounts[i],
                             onTap: () => _openForm(account: accounts[i]),
+                            onAction: (a) => _onAction(a, accounts[i]),
                           ),
                         ),
                 );
@@ -140,10 +278,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
 }
 
 class _AccountTile extends StatelessWidget {
-  const _AccountTile({required this.account, required this.onTap});
+  const _AccountTile({
+    required this.account,
+    required this.onTap,
+    required this.onAction,
+  });
 
   final AccountModel account;
   final VoidCallback onTap;
+  final ValueChanged<_AccountAction> onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +300,10 @@ class _AccountTile extends StatelessWidget {
         isDark ? AdipsPalette.darkPrimaryBrandText : AdipsPalette.lightPrimaryBrandText;
     final color = AdipsCategoryColors.byId(account.colorId);
 
-    return Container(
+    return Opacity(
+      // Archived rows are greyed out.
+      opacity: account.isArchived ? 0.55 : 1,
+      child: Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AdipsSizes.borderRadiusMd),
@@ -188,19 +334,40 @@ class _AccountTile extends StatelessWidget {
                   AccountTypeInfo.of(account.type).label,
                   style: TextStyle(color: mutedColor),
                 ),
+                if (account.isArchived) _Badge(label: 'Archived', color: mutedColor),
                 if (account.isDefault) _Badge(label: 'Default', color: brandColor),
                 if (!account.includeInTotal) _Badge(label: 'Excluded', color: mutedColor),
               ],
             ),
           ),
-          trailing: Text(
-            AdipsFormatters.money(account.currentBalance, account.currency),
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: account.currentBalance < 0 ? lossColor : textColor,
-            ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                AdipsFormatters.money(account.currentBalance, account.currency),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: account.currentBalance < 0 ? lossColor : textColor,
+                ),
+              ),
+              PopupMenuButton<_AccountAction>(
+                tooltip: 'More',
+                icon: Icon(Icons.more_vert_rounded, color: mutedColor),
+                onSelected: onAction,
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: _AccountAction.edit, child: Text('Edit')),
+                  if (account.isArchived)
+                    const PopupMenuItem(
+                        value: _AccountAction.unarchive, child: Text('Unarchive'))
+                  else
+                    const PopupMenuItem(
+                        value: _AccountAction.archive, child: Text('Archive')),
+                ],
+              ),
+            ],
           ),
         ),
+      ),
       ),
     );
   }

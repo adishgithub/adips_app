@@ -9,8 +9,8 @@ import 'package:adips/utils/models/account_model.dart';
 /// user-readable message, e.g. 409 "An account with this name already
 /// exists" (A2) — screens should show that message as-is.
 ///
-/// Only list/get/create/update/summary live here for now; archive,
-/// delete, reorder and adjust are added in Phase 3.
+/// list/get/create/update/summary/archive/unarchive live here so far;
+/// delete, reorder and adjust are added in the rest of Phase 3.
 class AccountService {
   /// GET /accounts — active accounts ordered by sort_order, each with
   /// its computed current_balance. Pass [includeArchived] to also get
@@ -71,6 +71,31 @@ class AccountService {
         'include_in_total': includeInTotal,
         'is_default': isDefault,
       },
+      cookie: AdipsHttpHelper.authCookie,
+    );
+    return AccountModel.fromJson(AdipsHttpHelper.data(response));
+  }
+
+  /// PATCH /accounts/:id/archive — hides the account, history stays.
+  ///
+  /// Refused with 409 (message is user-readable, show it as-is) when
+  /// it is the default account (A6), the last active account (A7), or
+  /// its balance isn't zero (A11). Archiving an archived account is a
+  /// harmless no-op server-side.
+  Future<AccountModel> archive(int id) async {
+    final response = await AdipsHttpHelper.patch(
+      AdipsApiConstants.accountArchive(id),
+      <String, dynamic>{},
+      cookie: AdipsHttpHelper.authCookie,
+    );
+    return AccountModel.fromJson(AdipsHttpHelper.data(response));
+  }
+
+  /// PATCH /accounts/:id/unarchive — always allowed (A11).
+  Future<AccountModel> unarchive(int id) async {
+    final response = await AdipsHttpHelper.patch(
+      AdipsApiConstants.accountUnarchive(id),
+      <String, dynamic>{},
       cookie: AdipsHttpHelper.authCookie,
     );
     return AccountModel.fromJson(AdipsHttpHelper.data(response));
