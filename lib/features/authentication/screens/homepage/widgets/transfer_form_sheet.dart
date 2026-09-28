@@ -53,6 +53,11 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
   AccountModel? _from;
   AccountModel? _to;
 
+  /// Edit mode only: true once changing From forced To to be cleared
+  /// (different currency, or same as the new From). To then must be
+  /// picked again instead of silently keeping the old account.
+  bool _toCleared = false;
+
   bool _loadingAccounts = false;
 
   /// Both accounts always share a currency (X3), so it follows From.
@@ -115,6 +120,7 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
       // To must differ from From and share its currency (X1, X3).
       if (_to != null && (_to!.id == picked.id || _to!.currency != picked.currency)) {
         _to = null;
+        _toCleared = true;
       }
     });
   }
@@ -131,7 +137,12 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
       title: 'Transfer to',
       emptyMessage: 'No other $_currency accounts to transfer to.',
     );
-    if (picked != null) setState(() => _to = picked);
+    if (picked != null) {
+      setState(() {
+        _to = picked;
+        _toCleared = false;
+      });
+    }
   }
 
   void _swap() {
@@ -334,11 +345,12 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
                         // To — same currency as From, never From itself.
                         CustomPickerField(
                           labelText: 'To',
-                          valueText: _to?.name ?? widget.transfer?.toAccountName ?? '',
+                          valueText: _to?.name ??
+                              (_toCleared ? '' : widget.transfer?.toAccountName ?? ''),
                           leading: _accountLeading(_to, mutedColor),
                           onTap: _pickTo,
                           validator: (_) {
-                            if (_to == null && !widget.isEditing) {
+                            if (_to == null && (!widget.isEditing || _toCleared)) {
                               return 'Select the destination account';
                             }
                             if (_from != null && _to != null && _from!.id == _to!.id) {

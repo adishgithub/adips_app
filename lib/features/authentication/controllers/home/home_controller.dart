@@ -4,6 +4,8 @@ import 'package:adips/features/authentication/screens/homepage/widgets/sort_filt
 import 'package:adips/utils/http/http_client.dart';
 import 'package:adips/utils/local_storage/storage_utility.dart';
 import 'package:adips/utils/models/app_transaction.dart';
+import 'package:adips/utils/models/home_list_item.dart';
+import 'package:adips/utils/models/transfer_model.dart';
 import 'package:adips/utils/services/transaction_api.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -206,15 +208,64 @@ class HomeController extends GetxController {
 
   void setDateRange(DateTimeRange? range) => selectedRange.value = range;
 
-  List<AppTransaction> get visibleTransactions {
-    var filtered = transactions.where((t) => t.matchesQuery(searchQuery.value));
+  /// Rows for the Home list, after search / date range / sort.
+  ///
+  /// Transfers come back from the API as two legs. With NO account
+  /// filter, both legs are collapsed into one [TransferRow]
+  /// ("Main -> Cash", neutral). With an account filter, only that
+  /// account's leg is present and is shown as a normal signed row so
+  /// the account's statement adds up (Q3). A leg whose partner isn't
+  /// in the fetched page also stays a plain row instead of vanishing.
+  List<HomeListItem> get visibleItems {
+    final query = searchQuery.value.trim().toLowerCase();
+    final collapse = selectedAccountId.value == null;
+
+    final debits = <String, AppTransaction>{};
+    final credits = <String, AppTransaction>{};
+    if (collapse) {
+      for (final t in transactions) {
+        final id = t.transferGroupId;
+        if (id == null) continue;
+        (t.isCredit ? credits : debits)[id] = t;
+      }
+    }
+
+    final items = <HomeListItem>[];
+    for (final t in transactions) {
+      final id = t.transferGroupId;
+      if (collapse && id != null && debits.containsKey(id) && credits.containsKey(id)) {
+        // Emit the pair once, when we meet its debit leg.
+        if (!t.isCredit) {
+          items.add(TransferRow(debit: debits[id]!, credit: credits[id]!));
+        }
+        continue;
+      }
+      items.add(TransactionRow(t));
+    }
+
+    bool matches(HomeListItem item) {
+      if (query.isEmpty) return true;
+      return switch (item) {
+        // Description/category as before, plus the account name.
+        TransactionRow(:final transaction) =>
+          transaction.matchesQuery(query) ||
+              transaction.accountName.toLowerCase().contains(query),
+        // A transfer matches "transfer", either account name, or its note.
+        TransferRow(:final debit, :final credit) =>
+          'transfer ${debit.accountName} ${credit.accountName} ${debit.note}'
+              .toLowerCase()
+              .contains(query),
+      };
+    }
+
+    var filtered = items.where(matches);
 
     final range = selectedRange.value;
     if (range != null) {
       final start = DateTime(range.start.year, range.start.month, range.start.day);
       final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
       filtered = filtered.where(
-            (t) => !t.transactionDate.isBefore(start) && !t.transactionDate.isAfter(end),
+        (i) => !i.date.isBefore(start) && !i.date.isAfter(end),
       );
     }
 
@@ -222,9 +273,9 @@ class HomeController extends GetxController {
     list.sort((a, b) {
       switch (sortOption.value) {
         case SortOption.newestFirst:
-          return b.transactionDate.compareTo(a.transactionDate);
+          return b.date.compareTo(a.date);
         case SortOption.oldestFirst:
-          return a.transactionDate.compareTo(b.transactionDate);
+          return a.date.compareTo(b.date);
         case SortOption.amountHighToLow:
           return b.amount.compareTo(a.amount);
         case SortOption.amountLowToHigh:
@@ -232,6 +283,22 @@ class HomeController extends GetxController {
       }
     });
     return list;
+  }
+
+  /// Fetches a whole transfer from one of its legs (used when Home is
+  /// filtered to an account, so only one leg is in memory). Returns
+  /// null and shows a snackbar if it can't be loaded.
+  Future<TransferModel?> loadTransfer(String groupId) async {
+    try {
+      return await _transferService.get(groupId);
+    } catch (e) {
+      Get.snackbar(
+        'Could not open transfer',
+        e.toString().replaceFirst('Exception: ', ''),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return null;
+    }
   }
 
   // ---- Mutations ----------------------------------------------------

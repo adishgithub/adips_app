@@ -1,0 +1,390 @@
+diff --git a/lib/features/authentication/controllers/home/home_controller.dart b/lib/features/authentication/controllers/home/home_controller.dart
+index ba90e0f..c120192 100644
+--- a/lib/features/authentication/controllers/home/home_controller.dart
++++ b/lib/features/authentication/controllers/home/home_controller.dart
+@@ -4,6 +4,8 @@ import 'package:adips/features/authentication/screens/homepage/widgets/sort_filt
+ import 'package:adips/utils/http/http_client.dart';
+ import 'package:adips/utils/local_storage/storage_utility.dart';
+ import 'package:adips/utils/models/app_transaction.dart';
++import 'package:adips/utils/models/home_list_item.dart';
++import 'package:adips/utils/models/transfer_model.dart';
+ import 'package:adips/utils/services/transaction_api.dart';
+ import 'package:flutter/material.dart';
+ import 'package:get/get.dart';
+@@ -206,15 +208,64 @@ class HomeController extends GetxController {
+ 
+   void setDateRange(DateTimeRange? range) => selectedRange.value = range;
+ 
+-  List<AppTransaction> get visibleTransactions {
+-    var filtered = transactions.where((t) => t.matchesQuery(searchQuery.value));
++  /// Rows for the Home list, after search / date range / sort.
++  ///
++  /// Transfers come back from the API as two legs. With NO account
++  /// filter, both legs are collapsed into one [TransferRow]
++  /// ("Main -> Cash", neutral). With an account filter, only that
++  /// account's leg is present and is shown as a normal signed row so
++  /// the account's statement adds up (Q3). A leg whose partner isn't
++  /// in the fetched page also stays a plain row instead of vanishing.
++  List<HomeListItem> get visibleItems {
++    final query = searchQuery.value.trim().toLowerCase();
++    final collapse = selectedAccountId.value == null;
++
++    final debits = <String, AppTransaction>{};
++    final credits = <String, AppTransaction>{};
++    if (collapse) {
++      for (final t in transactions) {
++        final id = t.transferGroupId;
++        if (id == null) continue;
++        (t.isCredit ? credits : debits)[id] = t;
++      }
++    }
++
++    final items = <HomeListItem>[];
++    for (final t in transactions) {
++      final id = t.transferGroupId;
++      if (collapse && id != null && debits.containsKey(id) && credits.containsKey(id)) {
++        // Emit the pair once, when we meet its debit leg.
++        if (!t.isCredit) {
++          items.add(TransferRow(debit: debits[id]!, credit: credits[id]!));
++        }
++        continue;
++      }
++      items.add(TransactionRow(t));
++    }
++
++    bool matches(HomeListItem item) {
++      if (query.isEmpty) return true;
++      return switch (item) {
++        // Description/category as before, plus the account name.
++        TransactionRow(:final transaction) =>
++          transaction.matchesQuery(query) ||
++              transaction.accountName.toLowerCase().contains(query),
++        // A transfer matches "transfer", either account name, or its note.
++        TransferRow(:final debit, :final credit) =>
++          'transfer ${debit.accountName} ${credit.accountName} ${debit.note}'
++              .toLowerCase()
++              .contains(query),
++      };
++    }
++
++    var filtered = items.where(matches);
+ 
+     final range = selectedRange.value;
+     if (range != null) {
+       final start = DateTime(range.start.year, range.start.month, range.start.day);
+       final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
+       filtered = filtered.where(
+-            (t) => !t.transactionDate.isBefore(start) && !t.transactionDate.isAfter(end),
++        (i) => !i.date.isBefore(start) && !i.date.isAfter(end),
+       );
+     }
+ 
+@@ -222,9 +273,9 @@ class HomeController extends GetxController {
+     list.sort((a, b) {
+       switch (sortOption.value) {
+         case SortOption.newestFirst:
+-          return b.transactionDate.compareTo(a.transactionDate);
++          return b.date.compareTo(a.date);
+         case SortOption.oldestFirst:
+-          return a.transactionDate.compareTo(b.transactionDate);
++          return a.date.compareTo(b.date);
+         case SortOption.amountHighToLow:
+           return b.amount.compareTo(a.amount);
+         case SortOption.amountLowToHigh:
+@@ -234,6 +285,22 @@ class HomeController extends GetxController {
+     return list;
+   }
+ 
++  /// Fetches a whole transfer from one of its legs (used when Home is
++  /// filtered to an account, so only one leg is in memory). Returns
++  /// null and shows a snackbar if it can't be loaded.
++  Future<TransferModel?> loadTransfer(String groupId) async {
++    try {
++      return await _transferService.get(groupId);
++    } catch (e) {
++      Get.snackbar(
++        'Could not open transfer',
++        e.toString().replaceFirst('Exception: ', ''),
++        snackPosition: SnackPosition.BOTTOM,
++      );
++      return null;
++    }
++  }
++
+   // ---- Mutations ----------------------------------------------------
+ 
+   Future<bool> createTransaction({
+diff --git a/lib/features/authentication/screens/homepage/home.dart b/lib/features/authentication/screens/homepage/home.dart
+index 2de3b9e..635db45 100644
+--- a/lib/features/authentication/screens/homepage/home.dart
++++ b/lib/features/authentication/screens/homepage/home.dart
+@@ -118,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
+                         padding: EdgeInsets.only(bottom: AdipsSizes.sm),
+                         child: LinearProgressIndicator(minHeight: 2),
+                       ),
+-                    TransactionList(transactions: controller.visibleTransactions),
++                    TransactionList(items: controller.visibleItems),
+                     SizedBox(height: AdipsSizes.spaceBtwSections),
+                   ],
+                 ),
+diff --git a/lib/features/authentication/screens/homepage/widgets/transaction_list.dart b/lib/features/authentication/screens/homepage/widgets/transaction_list.dart
+index 63b3bea..0ccd2b2 100644
+--- a/lib/features/authentication/screens/homepage/widgets/transaction_list.dart
++++ b/lib/features/authentication/screens/homepage/widgets/transaction_list.dart
+@@ -8,12 +8,15 @@ import '../../../../../utils/constants/adips_palette.dart';
+ import '../../../../../utils/helpers/category_style.dart';
+ import '../../../../../utils/helpers/helper_functions.dart';
+ import '../../../../../utils/models/app_transaction.dart';
++import '../../../../../utils/models/home_list_item.dart';
++import '../../../controllers/home/home_controller.dart';
+ import 'transaction_form_sheet.dart';
++import 'transfer_form_sheet.dart';
+ 
+ class TransactionList extends StatelessWidget {
+-  const TransactionList({super.key, required this.transactions});
++  const TransactionList({super.key, required this.items});
+ 
+-  final List<AppTransaction> transactions;
++  final List<HomeListItem> items;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -21,7 +24,7 @@ class TransactionList extends StatelessWidget {
+     final lineColor = isDark ? AdipsPalette.darkLine : AdipsPalette.lightLine;
+     final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
+ 
+-    if (transactions.isEmpty) {
++    if (items.isEmpty) {
+       return Padding(
+         padding: const EdgeInsets.symmetric(vertical: 32),
+         child: Center(
+@@ -36,9 +39,78 @@ class TransactionList extends StatelessWidget {
+     return ListView.separated(
+       shrinkWrap: true,
+       physics: const NeverScrollableScrollPhysics(),
+-      itemCount: transactions.length,
++      itemCount: items.length,
+       separatorBuilder: (_, __) => Divider(height: 1, color: lineColor),
+-      itemBuilder: (context, index) => _TransactionTile(item: transactions[index]),
++      itemBuilder: (context, index) => switch (items[index]) {
++        TransactionRow(:final transaction) => _TransactionTile(item: transaction),
++        final TransferRow row => _TransferTile(row: row),
++      },
++    );
++  }
++}
++
++/// A collapsed transfer: "Main Account -> Cash", neutral colour (it
++/// is neither income nor expense), swap icon, no +/- sign. Tapping
++/// opens the transfer sheet to edit or delete both legs together.
++class _TransferTile extends StatelessWidget {
++  const _TransferTile({required this.row});
++
++  final TransferRow row;
++
++  @override
++  Widget build(BuildContext context) {
++    final bool isDark = AdipsHelperFunctions.isDarkMode(context);
++    final textColor = isDark ? AdipsPalette.darkTextPrimary : AdipsPalette.lightTextPrimary;
++    final mutedColor = isDark ? AdipsPalette.darkTextMuted : AdipsPalette.lightTextMuted;
++    final neutralColor = isDark ? AdipsPalette.darkAction : AdipsPalette.lightAction;
++
++    return InkWell(
++      onTap: () => showTransferFormSheet(context, transfer: row.toModel()),
++      child: Padding(
++        padding: const EdgeInsets.symmetric(vertical: 12),
++        child: Row(
++          crossAxisAlignment: CrossAxisAlignment.center,
++          children: [
++            Container(
++              width: 44,
++              height: 44,
++              alignment: Alignment.center,
++              decoration: BoxDecoration(
++                color: neutralColor.withOpacity(0.12),
++                shape: BoxShape.circle,
++              ),
++              child: Icon(Icons.swap_horiz_rounded, size: 22, color: neutralColor),
++            ),
++            const SizedBox(width: 12),
++            Expanded(
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.start,
++                mainAxisSize: MainAxisSize.min,
++                children: [
++                  Text(
++                    '${row.debit.accountName} \u2192 ${row.credit.accountName}',
++                    maxLines: 1,
++                    overflow: TextOverflow.ellipsis,
++                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor),
++                  ),
++                  const SizedBox(height: 2),
++                  Text(
++                    '${DateFormat('d MMM yyyy').format(row.date)} · Transfer',
++                    maxLines: 1,
++                    overflow: TextOverflow.ellipsis,
++                    style: TextStyle(fontSize: 12, color: mutedColor),
++                  ),
++                ],
++              ),
++            ),
++            const SizedBox(width: 8),
++            Text(
++              AdipsFormatters.money(row.amount, row.currency),
++              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
++            ),
++          ],
++        ),
++      ),
+     );
+   }
+ }
+@@ -48,6 +120,19 @@ class _TransactionTile extends StatelessWidget {
+ 
+   final AppTransaction item;
+ 
++  /// A transfer leg (shown alone when Home is filtered to an
++  /// account) edits the whole transfer, never a single leg (T4).
++  Future<void> _open(BuildContext context) async {
++    if (!item.isTransfer) {
++      await showTransactionFormSheet(context, transaction: item);
++      return;
++    }
++    final transfer = await HomeController.instance.loadTransfer(item.transferGroupId!);
++    if (transfer != null && context.mounted) {
++      await showTransferFormSheet(context, transfer: transfer);
++    }
++  }
++
+   @override
+   Widget build(BuildContext context) {
+     final bool isDark = AdipsHelperFunctions.isDarkMode(context);
+@@ -71,7 +156,7 @@ class _TransactionTile extends StatelessWidget {
+         : CategoryStyle.iconFor(item.category);
+ 
+     return InkWell(
+-      onTap: () => showTransactionFormSheet(context, transaction: item),
++      onTap: () => _open(context),
+       child: Padding(
+         padding: const EdgeInsets.symmetric(vertical: 12),
+         child: Row(
+diff --git a/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart b/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart
+index d7c18b3..287baa9 100644
+--- a/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart
++++ b/lib/features/authentication/screens/homepage/widgets/transfer_form_sheet.dart
+@@ -53,6 +53,11 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
+   AccountModel? _from;
+   AccountModel? _to;
+ 
++  /// Edit mode only: true once changing From forced To to be cleared
++  /// (different currency, or same as the new From). To then must be
++  /// picked again instead of silently keeping the old account.
++  bool _toCleared = false;
++
+   bool _loadingAccounts = false;
+ 
+   /// Both accounts always share a currency (X3), so it follows From.
+@@ -115,6 +120,7 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
+       // To must differ from From and share its currency (X1, X3).
+       if (_to != null && (_to!.id == picked.id || _to!.currency != picked.currency)) {
+         _to = null;
++        _toCleared = true;
+       }
+     });
+   }
+@@ -131,7 +137,12 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
+       title: 'Transfer to',
+       emptyMessage: 'No other $_currency accounts to transfer to.',
+     );
+-    if (picked != null) setState(() => _to = picked);
++    if (picked != null) {
++      setState(() {
++        _to = picked;
++        _toCleared = false;
++      });
++    }
+   }
+ 
+   void _swap() {
+@@ -334,11 +345,12 @@ class _TransferFormSheetState extends State<TransferFormSheet> {
+                         // To — same currency as From, never From itself.
+                         CustomPickerField(
+                           labelText: 'To',
+-                          valueText: _to?.name ?? widget.transfer?.toAccountName ?? '',
++                          valueText: _to?.name ??
++                              (_toCleared ? '' : widget.transfer?.toAccountName ?? ''),
+                           leading: _accountLeading(_to, mutedColor),
+                           onTap: _pickTo,
+                           validator: (_) {
+-                            if (_to == null && !widget.isEditing) {
++                            if (_to == null && (!widget.isEditing || _toCleared)) {
+                               return 'Select the destination account';
+                             }
+                             if (_from != null && _to != null && _from!.id == _to!.id) {
+diff --git a/lib/utils/models/home_list_item.dart b/lib/utils/models/home_list_item.dart
+new file mode 100644
+index 0000000..89a0376
+--- /dev/null
++++ b/lib/utils/models/home_list_item.dart
+@@ -0,0 +1,61 @@
++// utils/models/home_list_item.dart
++//
++// One row of the Home list. The backend returns a transfer as TWO
++// transactions (a debit leg and a credit leg), so when no account
++// filter is active Home collapses each pair into a single
++// [TransferRow]; everything else stays a plain [TransactionRow].
++import 'app_transaction.dart';
++import 'transfer_model.dart';
++
++sealed class HomeListItem {
++  const HomeListItem();
++
++  /// Used by the Home date-range filter and sorting.
++  DateTime get date;
++  double get amount;
++}
++
++/// A normal transaction, or a single transfer leg (shown with +/-
++/// when Home is filtered to one account so its statement adds up).
++class TransactionRow extends HomeListItem {
++  const TransactionRow(this.transaction);
++
++  final AppTransaction transaction;
++
++  @override
++  DateTime get date => transaction.transactionDate;
++
++  @override
++  double get amount => transaction.amount;
++}
++
++/// Both legs of one transfer, shown as a single "A → B" row.
++class TransferRow extends HomeListItem {
++  const TransferRow({required this.debit, required this.credit});
++
++  /// Leg on the source account (money leaves).
++  final AppTransaction debit;
++
++  /// Leg on the destination account (money arrives).
++  final AppTransaction credit;
++
++  String get transferGroupId => debit.transferGroupId ?? '';
++
++  // Both legs share amount/date/currency (the backend edits them
++  // together, X6), so read them off the debit leg.
++  @override
++  DateTime get date => debit.transactionDate;
++
++  @override
++  double get amount => debit.amount;
++
++  String get currency => debit.currency;
++
++  /// Built from the two legs already in memory, so opening the edit
++  /// sheet needs no extra request.
++  TransferModel toModel() => TransferModel(
++        transferGroupId: transferGroupId,
++        debit: debit,
++        credit: credit,
++      );
++}

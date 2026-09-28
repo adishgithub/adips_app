@@ -118,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: EdgeInsets.only(bottom: AdipsSizes.sm),
                         child: LinearProgressIndicator(minHeight: 2),
                       ),
-                    TransactionList(transactions: controller.visibleTransactions),
+                    TransactionList(items: controller.visibleItems),
                     SizedBox(height: AdipsSizes.spaceBtwSections),
                   ],
                 ),
