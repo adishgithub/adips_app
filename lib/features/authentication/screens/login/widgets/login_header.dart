@@ -11,7 +11,6 @@ class LoginRegisterHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isDark = AdipsHelperFunctions.isDarkMode(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -19,13 +18,14 @@ class LoginRegisterHeader extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const SizedBox(height: AdipsSizes.appBarHeight),
               Image(
                 image: AssetImage(
                   isDark
                       ? AdipsImages.darkAppLogo
                       : AdipsImages.lightAppLogo,
                 ),
-                height: AdipsSizes.logoMd,
+                height: AdipsSizes.logoSm,
               ),
               Text(
                 "Adips",
