@@ -21,13 +21,14 @@ dependencies:
     #UTILITY PACKAGES
 
     #ICONS
-flutter_launcher_icons_plus:
-  android: "launcher_icon"
+flutter_launcher_icons:
+  android: true
   ios: true
-  image_path: "assets/logos/light_full_logo.png"
-  # Optional: Adaptive icon for Android
-  adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "assets/logos/light_full_logo.png"
+  image_path: "assets/logos/dark_logo.png"
+  remove_alpha_ios: true
+  background_color_ios: "#04400D"
+  adaptive_icon_background: "#04400D"
+  adaptive_icon_foreground: "assets/logos/dark_logo.png"
     #STATE MANAGEMENT
 
     #PRODUCT SPECIFIC
@@ -39,8 +40,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_native_splash: ^2.4.8
-  smooth_page_indicator: ^2.0.1
-  flutter_launcher_icons_plus: "^0.15.0"
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
