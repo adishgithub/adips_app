@@ -82,10 +82,10 @@ class AdipsPalette {
   static const Color lightCaution = Color(0xFF9A6100);
   static const Color lightCautionTint = Color(0xFFFEF3E2);
 
-  static const Color onboardSecondary = Color(0xFF12D8E3);
+  static const Color onboardSecondary = Color(0xFF00E582);
 
   // ── Dark ───────────────────────────────────────
-  static const Color darkCanvas = Color(0xFF121A26);
+  static const Color darkCanvas = Color(0xFF002218);
   static const Color darkSurface = Color(0xFF1C2840);
   static const Color darkSubtle = Color(0xFF253045);
 
